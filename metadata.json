@@ -1,0 +1,7 @@
+{
+  "name": "BestNet",
+  "description": "BestNet Customer App for smart apartment living, broadband, intercom, visitor management, community notices, and complaints.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

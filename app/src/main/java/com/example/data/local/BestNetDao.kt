@@ -1,0 +1,59 @@
+package com.example.data.local
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
+import com.example.data.model.Complaint
+import com.example.data.model.Notice
+import com.example.data.model.Resident
+import com.example.data.model.Visitor
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface BestNetDao {
+
+  // Residents
+  @Query("SELECT * FROM residents ORDER BY id ASC")
+  fun getAllResidents(): Flow<List<Resident>>
+
+  @Query("SELECT * FROM residents WHERE isCurrent = 1 LIMIT 1")
+  fun getCurrentResident(): Flow<Resident?>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertResidents(residents: List<Resident>)
+
+  @Query("UPDATE residents SET isCurrent = CASE WHEN id = :residentId THEN 1 ELSE 0 END")
+  suspend fun switchCurrentResident(residentId: Long)
+
+  // Complaints
+  @Query("SELECT * FROM complaints ORDER BY createdAt DESC")
+  fun getAllComplaints(): Flow<List<Complaint>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertComplaint(complaint: Complaint): Long
+
+  // Visitors
+  @Query("SELECT * FROM visitors ORDER BY id DESC")
+  fun getAllVisitors(): Flow<List<Visitor>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertVisitor(visitor: Visitor): Long
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertVisitors(visitors: List<Visitor>)
+
+  // Notices
+  @Query("SELECT * FROM notices ORDER BY id ASC")
+  fun getAllNotices(): Flow<List<Notice>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertNotices(notices: List<Notice>)
+
+  @Query("UPDATE notices SET isRead = 1 WHERE id = :id")
+  suspend fun markNoticeAsRead(id: Long)
+
+  @Query("UPDATE notices SET isRead = 1")
+  suspend fun markAllNoticesAsRead()
+}
