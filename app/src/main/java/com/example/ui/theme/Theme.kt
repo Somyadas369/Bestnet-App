@@ -53,3 +53,12 @@ fun MyApplicationTheme(
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }
 
+@Composable
+fun BestNetTheme(
+  darkTheme: Boolean = isSystemInDarkTheme(),
+  dynamicColor: Boolean = false,
+  content: @Composable () -> Unit
+) {
+  MyApplicationTheme(darkTheme = darkTheme, dynamicColor = dynamicColor, content = content)
+}
+

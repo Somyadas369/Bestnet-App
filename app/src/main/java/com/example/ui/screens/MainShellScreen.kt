@@ -60,11 +60,17 @@ fun MainShellScreen(
   val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
   val currentResident by viewModel.currentResident.collectAsStateWithLifecycle()
   val allResidents by viewModel.allResidents.collectAsStateWithLifecycle()
+  val allComplaints by viewModel.allComplaints.collectAsStateWithLifecycle()
+  val allCommunityNotices by viewModel.allCommunityNotices.collectAsStateWithLifecycle()
   val snackbarMsg by viewModel.snackbarMessage.collectAsStateWithLifecycle()
   val activeCall by viewModel.activeCallContact.collectAsStateWithLifecycle()
   val showSpeedTest by viewModel.showSpeedTest.collectAsStateWithLifecycle()
   val showPreApprove by viewModel.showPreApproveDialog.collectAsStateWithLifecycle()
   val showSwitchHome by viewModel.showSwitchHomeSheet.collectAsStateWithLifecycle()
+
+  val activeComplaintsCount = remember(allComplaints) {
+    allComplaints.count { it.status.lowercase() != "resolved" }
+  }
 
   val snackbarHostState = remember { SnackbarHostState() }
 
@@ -203,6 +209,8 @@ fun MainShellScreen(
       when (activeTab) {
         "home" -> HomeScreen(
           resident = currentResident,
+          activeComplaintsCount = activeComplaintsCount,
+          noticesCount = allCommunityNotices.size,
           onNavigateToIntercom = onNavigateToIntercom,
           onNavigateToComplaint = onNavigateToComplaint,
           onNavigateToVisitors = onNavigateToVisitors,

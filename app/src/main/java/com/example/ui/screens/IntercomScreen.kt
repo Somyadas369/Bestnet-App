@@ -60,7 +60,7 @@ import com.example.ui.theme.BestNetSurfaceVariant
 @Composable
 fun IntercomScreen(
   staffList: List<IntercomContact>,
-  neighborsList: List<IntercomContact>,
+  neighborsList: List<IntercomContact> = emptyList(),
   onBackClick: () -> Unit,
   onCallContact: (IntercomContact) -> Unit
 ) {
@@ -70,14 +70,6 @@ fun IntercomScreen(
   val filteredStaff = remember(searchQuery, staffList) {
     if (searchQuery.isBlank()) staffList
     else staffList.filter { it.name.contains(searchQuery, ignoreCase = true) || it.role.contains(searchQuery, ignoreCase = true) }
-  }
-
-  val filteredNeighbors = remember(searchQuery, neighborsList) {
-    if (searchQuery.isBlank()) neighborsList
-    else neighborsList.filter {
-      it.name.contains(searchQuery, ignoreCase = true) ||
-        (it.unit != null && it.unit.contains(searchQuery, ignoreCase = true))
-    }
   }
 
   Column(
@@ -126,7 +118,7 @@ fun IntercomScreen(
         OutlinedTextField(
           value = searchQuery,
           onValueChange = { searchQuery = it },
-          placeholder = { Text("Search by name or flat no.", fontSize = 13.5.sp, color = BestNetMuted) },
+          placeholder = { Text("Search Gate or Management...", fontSize = 13.5.sp, color = BestNetMuted) },
           leadingIcon = {
             Icon(Icons.Default.Search, contentDescription = null, tint = BestNetMuted, modifier = Modifier.size(20.dp))
           },
@@ -195,7 +187,7 @@ fun IntercomScreen(
         }
       }
 
-      // Staff directory
+      // Gate & Management directory
       if (filteredStaff.isNotEmpty()) {
         item {
           Text(
@@ -212,33 +204,11 @@ fun IntercomScreen(
             name = staff.name,
             role = staff.role,
             icon = when (staff.id) {
-              "sec" -> Icons.Default.Security
+              "mg" -> Icons.Default.Security
               "mgmt" -> Icons.Default.Business
               else -> Icons.Default.Apartment
             },
             onCallClick = { onCallContact(staff) }
-          )
-        }
-      }
-
-      // Neighbors directory
-      if (filteredNeighbors.isNotEmpty()) {
-        item {
-          Text(
-            text = "Neighbors",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = BestNetInk,
-            modifier = Modifier.padding(top = 8.dp)
-          )
-        }
-
-        items(filteredNeighbors) { neighbor ->
-          IntercomContactRow(
-            name = neighbor.unit ?: "",
-            role = neighbor.name,
-            isNeighbor = true,
-            onCallClick = { onCallContact(neighbor) }
           )
         }
       }
@@ -255,7 +225,6 @@ fun IntercomContactRow(
   name: String,
   role: String,
   icon: ImageVector? = null,
-  isNeighbor: Boolean = false,
   onCallClick: () -> Unit
 ) {
   Card(
@@ -276,36 +245,19 @@ fun IntercomContactRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
       ) {
-        if (isNeighbor) {
-          Box(
-            modifier = Modifier
-              .size(42.dp)
-              .clip(CircleShape)
-              .background(BestNetGreenLight),
-            contentAlignment = Alignment.Center
-          ) {
-            Text(
-              text = role.split(" ").lastOrNull()?.take(1) ?: "N",
-              color = BestNetGreen,
-              fontSize = 17.sp,
-              fontWeight = FontWeight.Bold
-            )
-          }
-        } else {
-          Box(
-            modifier = Modifier
-              .size(42.dp)
-              .clip(CircleShape)
-              .background(BestNetSurfaceVariant),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(
-              imageVector = icon ?: Icons.Default.Apartment,
-              contentDescription = null,
-              tint = BestNetInk,
-              modifier = Modifier.size(22.dp)
-            )
-          }
+        Box(
+          modifier = Modifier
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(BestNetSurfaceVariant),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = icon ?: Icons.Default.Apartment,
+            contentDescription = null,
+            tint = BestNetInk,
+            modifier = Modifier.size(22.dp)
+          )
         }
 
         Column {

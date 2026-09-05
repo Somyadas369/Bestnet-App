@@ -8,4 +8,5 @@ object NavRoutes {
   const val RAISE_COMPLAINT = "raise_complaint"
   const val VISITORS = "visitors"
   const val NOTIFICATIONS = "notifications"
+  const val COMMUNITY_NOTICES = "community_notices"
 }

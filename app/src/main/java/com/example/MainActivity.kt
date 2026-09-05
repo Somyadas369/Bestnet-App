@@ -15,9 +15,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.navigation.NavRoutes
+import com.example.ui.screens.CommunityNoticesScreen
 import com.example.ui.screens.IntercomScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.MainShellScreen
+import com.example.ui.screens.MaintenanceComplaintsScreen
 import com.example.ui.screens.NotificationsScreen
 import com.example.ui.screens.RaiseComplaintScreen
 import com.example.ui.screens.SplashScreen
@@ -51,6 +53,7 @@ fun BestNetApp(
   val allComplaints by viewModel.allComplaints.collectAsStateWithLifecycle()
   val allVisitors by viewModel.allVisitors.collectAsStateWithLifecycle()
   val allNotices by viewModel.allNotices.collectAsStateWithLifecycle()
+  val allCommunityNotices by viewModel.allCommunityNotices.collectAsStateWithLifecycle()
 
   NavHost(
     navController = navController,
@@ -89,7 +92,7 @@ fun BestNetApp(
         onNavigateToIntercom = { navController.navigate(NavRoutes.INTERCOM) },
         onNavigateToComplaint = { navController.navigate(NavRoutes.RAISE_COMPLAINT) },
         onNavigateToVisitors = { navController.navigate(NavRoutes.VISITORS) },
-        onNavigateToNotices = { navController.navigate(NavRoutes.NOTIFICATIONS) },
+        onNavigateToNotices = { navController.navigate(NavRoutes.COMMUNITY_NOTICES) },
         onLogout = {
           viewModel.logout()
           navController.navigate(NavRoutes.LOGIN) {
@@ -109,12 +112,21 @@ fun BestNetApp(
       )
     }
 
-    // 5. Raise Complaint Screen
+    // 5. Maintenance Complaints & Tracker Screen
     composable(NavRoutes.RAISE_COMPLAINT) {
-      RaiseComplaintScreen(
+      val currentResident by viewModel.currentResident.collectAsStateWithLifecycle()
+      MaintenanceComplaintsScreen(
+        complaints = allComplaints,
+        currentUnit = currentResident?.unit ?: "A-1201",
         onBackClick = { navController.popBackStack() },
-        onSubmitComplaint = { category, description, onComplete ->
-          viewModel.submitComplaint(category, description, onComplete)
+        onSubmitComplaint = { title, category, description, priority, onComplete ->
+          viewModel.submitComplaint(title, category, description, priority, onComplete)
+        },
+        onUpdateStatus = { id, newStatus ->
+          viewModel.updateComplaintStatus(id, newStatus)
+        },
+        onDeleteComplaint = { id ->
+          viewModel.deleteComplaint(id)
         }
       )
     }
@@ -135,6 +147,14 @@ fun BestNetApp(
         onBackClick = { navController.popBackStack() },
         onNoticeClick = { id -> viewModel.markNoticeAsRead(id) },
         onMarkAllReadClick = { viewModel.markAllNoticesAsRead() }
+      )
+    }
+
+    // 8. Community Notices Screen (Chronological notices feed)
+    composable(NavRoutes.COMMUNITY_NOTICES) {
+      CommunityNoticesScreen(
+        notices = allCommunityNotices,
+        onBackClick = { navController.popBackStack() }
       )
     }
   }

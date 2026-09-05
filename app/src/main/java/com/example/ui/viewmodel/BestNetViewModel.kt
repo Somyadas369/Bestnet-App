@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.BestNetDatabase
+import com.example.data.model.CommunityNotice
 import com.example.data.model.Complaint
 import com.example.data.model.IntercomContact
 import com.example.data.model.Notice
@@ -26,6 +27,7 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
   val allComplaints: StateFlow<List<Complaint>>
   val allVisitors: StateFlow<List<Visitor>>
   val allNotices: StateFlow<List<Notice>>
+  val allCommunityNotices: StateFlow<List<CommunityNotice>>
 
   val intercomStaff: List<IntercomContact>
   val intercomNeighbors: List<IntercomContact>
@@ -85,6 +87,12 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
       emptyList()
     )
 
+    allCommunityNotices = repository.allCommunityNotices.stateIn(
+      viewModelScope,
+      SharingStarted.WhileSubscribed(5000),
+      emptyList()
+    )
+
     intercomStaff = repository.getIntercomStaff()
     intercomNeighbors = repository.getIntercomNeighbors()
   }
@@ -109,11 +117,48 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
     }
   }
 
-  fun submitComplaint(category: String, description: String, onComplete: (String) -> Unit) {
+  fun submitComplaint(
+    title: String,
+    category: String,
+    description: String,
+    priority: String = "Medium",
+    onComplete: (String) -> Unit
+  ) {
     viewModelScope.launch {
-      val ticket = repository.submitComplaint(category, description)
+      val currentUnit = currentResident.value?.unit ?: "A-1201"
+      val ticket = repository.submitComplaint(
+        title = title,
+        category = category,
+        description = description,
+        priority = priority,
+        unit = currentUnit
+      )
       _snackbarMessage.value = "Complaint $ticket registered successfully"
       onComplete(ticket)
+    }
+  }
+
+  fun submitComplaint(category: String, description: String, onComplete: (String) -> Unit) {
+    submitComplaint(
+      title = "$category issue in flat",
+      category = category,
+      description = description,
+      priority = "Medium",
+      onComplete = onComplete
+    )
+  }
+
+  fun updateComplaintStatus(id: Long, newStatus: String) {
+    viewModelScope.launch {
+      repository.updateComplaintStatus(id, newStatus)
+      _snackbarMessage.value = "Status updated to $newStatus"
+    }
+  }
+
+  fun deleteComplaint(id: Long) {
+    viewModelScope.launch {
+      repository.deleteComplaint(id)
+      _snackbarMessage.value = "Complaint record removed"
     }
   }
 
@@ -136,6 +181,34 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
     viewModelScope.launch {
       repository.markAllNoticesAsRead()
       _snackbarMessage.value = "All notices marked as read"
+    }
+  }
+
+  fun createCommunityNotice(
+    title: String,
+    description: String,
+    category: String = "Announcement",
+    priority: String = "Normal",
+    author: String = "Society Management",
+    isPinned: Boolean = false
+  ) {
+    viewModelScope.launch {
+      repository.createCommunityNotice(
+        title = title,
+        description = description,
+        category = category,
+        priority = priority,
+        author = author,
+        isPinned = isPinned
+      )
+      _snackbarMessage.value = "Community notice posted successfully"
+    }
+  }
+
+  fun deleteCommunityNotice(id: Long) {
+    viewModelScope.launch {
+      repository.deleteCommunityNotice(id)
+      _snackbarMessage.value = "Notice removed"
     }
   }
 

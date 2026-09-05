@@ -17,10 +17,16 @@ data class Resident(
 data class Complaint(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
   val ticketNumber: String,
+  val title: String = "",
   val category: String,
   val description: String,
-  val status: String = "Submitted", // Submitted, In Progress, Resolved
-  val createdAt: Long = System.currentTimeMillis()
+  val unit: String = "A-1201",
+  val priority: String = "Medium", // Low, Medium, High, Urgent
+  val status: String = "Pending", // Pending, In Progress, Resolved
+  val assignedTo: String? = null,
+  val resolutionNotes: String? = null,
+  val createdAt: Long = System.currentTimeMillis(),
+  val updatedAt: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "visitors")
@@ -44,6 +50,18 @@ data class Notice(
   val timestampText: String,
   val isRead: Boolean = false,
   val iconType: String // water, maintenance, event, complaint, visitor
+)
+
+@Entity(tableName = "community_notices")
+data class CommunityNotice(
+  @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val title: String,
+  val description: String,
+  val timestamp: Long = System.currentTimeMillis(),
+  val category: String = "Announcement", // Announcement, Maintenance, Security, Event, Rules
+  val priority: String = "Normal", // Normal, Important, Urgent
+  val author: String = "Society Management",
+  val isPinned: Boolean = false
 )
 
 data class IntercomContact(

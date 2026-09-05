@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.example.data.model.CommunityNotice
 import com.example.data.model.Complaint
 import com.example.data.model.Notice
 import com.example.data.model.Resident
@@ -31,8 +32,26 @@ interface BestNetDao {
   @Query("SELECT * FROM complaints ORDER BY createdAt DESC")
   fun getAllComplaints(): Flow<List<Complaint>>
 
+  @Query("SELECT * FROM complaints WHERE status = :status ORDER BY createdAt DESC")
+  fun getComplaintsByStatus(status: String): Flow<List<Complaint>>
+
+  @Query("SELECT * FROM complaints WHERE id = :id LIMIT 1")
+  fun getComplaintById(id: Long): Flow<Complaint?>
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertComplaint(complaint: Complaint): Long
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertComplaints(complaints: List<Complaint>)
+
+  @Update
+  suspend fun updateComplaint(complaint: Complaint)
+
+  @Query("UPDATE complaints SET status = :status, updatedAt = :updatedAt WHERE id = :id")
+  suspend fun updateComplaintStatus(id: Long, status: String, updatedAt: Long = System.currentTimeMillis())
+
+  @Query("DELETE FROM complaints WHERE id = :id")
+  suspend fun deleteComplaintById(id: Long)
 
   // Visitors
   @Query("SELECT * FROM visitors ORDER BY id DESC")
@@ -56,4 +75,20 @@ interface BestNetDao {
 
   @Query("UPDATE notices SET isRead = 1")
   suspend fun markAllNoticesAsRead()
+
+  // Community Notices (Chronological order)
+  @Query("SELECT * FROM community_notices ORDER BY timestamp DESC")
+  fun getAllCommunityNotices(): Flow<List<CommunityNotice>>
+
+  @Query("SELECT * FROM community_notices WHERE category = :category ORDER BY timestamp DESC")
+  fun getCommunityNoticesByCategory(category: String): Flow<List<CommunityNotice>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertCommunityNotice(notice: CommunityNotice): Long
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertCommunityNotices(notices: List<CommunityNotice>)
+
+  @Query("DELETE FROM community_notices WHERE id = :id")
+  suspend fun deleteCommunityNotice(id: Long)
 }

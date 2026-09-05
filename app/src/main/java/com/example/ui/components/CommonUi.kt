@@ -24,12 +24,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
@@ -65,6 +67,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.Resident
 import com.example.ui.theme.BestNetAmber
 import com.example.ui.theme.BestNetAmberLight
+import com.example.ui.theme.BestNetBlue
+import com.example.ui.theme.BestNetBlueLight
 import com.example.ui.theme.BestNetBorder
 import com.example.ui.theme.BestNetDarkNavy
 import com.example.ui.theme.BestNetGreen
@@ -138,20 +142,30 @@ fun StatusBadge(
   status: String,
   modifier: Modifier = Modifier
 ) {
-  val (bgColor, textColor) = when (status.lowercase()) {
-    "approved", "resolved", "connected", "active" -> BestNetGreenLight to BestNetGreenDark
-    "in progress", "pending" -> BestNetAmberLight to BestNetAmber
-    "denied", "cancelled" -> BestNetRedLight to BestNetRed
-    else -> BestNetSurfaceVariant to BestNetMuted
+  val (bgColor, textColor, icon) = when (status.lowercase()) {
+    "pending" -> Triple(BestNetAmberLight, BestNetAmber, Icons.Default.Schedule)
+    "in progress" -> Triple(BestNetBlueLight, BestNetBlue, Icons.Default.Autorenew)
+    "resolved", "approved", "connected", "active" -> Triple(BestNetGreenLight, BestNetGreenDark, Icons.Default.CheckCircle)
+    "denied", "cancelled" -> Triple(BestNetRedLight, BestNetRed, Icons.Default.Close)
+    else -> Triple(BestNetSurfaceVariant, BestNetMuted, null)
   }
 
-  Box(
+  Row(
     modifier = modifier
       .clip(RoundedCornerShape(999.dp))
       .background(bgColor)
       .padding(horizontal = 10.dp, vertical = 4.dp),
-    contentAlignment = Alignment.Center
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(4.dp)
   ) {
+    if (icon != null) {
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = textColor,
+        modifier = Modifier.size(13.dp)
+      )
+    }
     Text(
       text = status,
       color = textColor,

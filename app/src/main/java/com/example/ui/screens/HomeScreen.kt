@@ -78,6 +78,8 @@ import com.example.ui.theme.BestNetSurface
 @Composable
 fun HomeScreen(
   resident: Resident?,
+  activeComplaintsCount: Int = 0,
+  noticesCount: Int = 0,
   onNavigateToIntercom: () -> Unit,
   onNavigateToComplaint: () -> Unit,
   onNavigateToVisitors: () -> Unit,
@@ -293,10 +295,11 @@ fun HomeScreen(
               modifier = Modifier.weight(1f)
             )
             QuickActionTile(
-              title = "Raise\nComplaint",
+              title = "Maintenance\nComplaints",
               icon = Icons.Default.Campaign,
               iconBgColor = BestNetRedLight,
               iconTintColor = BestNetRed,
+              badgeCount = activeComplaintsCount,
               onClick = onNavigateToComplaint,
               modifier = Modifier.weight(1f)
             )
@@ -327,6 +330,7 @@ fun HomeScreen(
               icon = Icons.Default.Notifications,
               iconBgColor = BestNetAmberLight,
               iconTintColor = BestNetAmber,
+              badgeCount = noticesCount,
               onClick = onNavigateToNotices,
               modifier = Modifier.weight(1f)
             )
@@ -424,6 +428,7 @@ fun QuickActionTile(
   icon: ImageVector,
   iconBgColor: Color,
   iconTintColor: Color,
+  badgeCount: Int = 0,
   onClick: () -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -444,18 +449,41 @@ fun QuickActionTile(
       verticalArrangement = Arrangement.Center
     ) {
       Box(
-        modifier = Modifier
-          .size(44.dp)
-          .clip(CircleShape)
-          .background(iconBgColor),
+        modifier = Modifier.size(44.dp),
         contentAlignment = Alignment.Center
       ) {
-        Icon(
-          imageVector = icon,
-          contentDescription = null,
-          tint = iconTintColor,
-          modifier = Modifier.size(22.dp)
-        )
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .clip(CircleShape)
+            .background(iconBgColor),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTintColor,
+            modifier = Modifier.size(22.dp)
+          )
+        }
+
+        if (badgeCount > 0) {
+          Box(
+            modifier = Modifier
+              .align(Alignment.TopEnd)
+              .size(18.dp)
+              .clip(CircleShape)
+              .background(BestNetRed),
+            contentAlignment = Alignment.Center
+          ) {
+            Text(
+              text = "$badgeCount",
+              color = Color.White,
+              fontSize = 10.sp,
+              fontWeight = FontWeight.Bold
+            )
+          }
+        }
       }
       Spacer(modifier = Modifier.height(8.dp))
       Text(
