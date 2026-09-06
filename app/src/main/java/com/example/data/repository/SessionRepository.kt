@@ -7,6 +7,7 @@ import com.example.data.remote.ApiClient
 import com.example.data.remote.CancelVisitBody
 import com.example.data.remote.CommunityEventDto
 import com.example.data.remote.EmergencyContactDto
+import com.example.data.remote.IntercomDirectoryEntryDto
 import com.example.data.remote.CreateTicketBody
 import com.example.data.remote.IntercomEndpointDto
 import com.example.data.remote.PreApproveVisitorBody
@@ -231,6 +232,10 @@ class SessionRepository(context: Context, private val dao: BestNetDao) {
   /** The resident's own SIP extension, or null if none is provisioned. */
   suspend fun myIntercom(): IntercomEndpointDto? =
     client.call { getMyIntercom() }.getOrNull()?.firstOrNull { it.status == "ACTIVE" }
+
+  /** Extensions the resident can dial. Empty when nobody else has one yet. */
+  suspend fun intercomDirectory(): List<IntercomDirectoryEntryDto> =
+    client.call { getIntercomDirectory() }.getOrDefault(emptyList())
 
   /**
    * Ends the session server-side, then locally. The local clear happens even if

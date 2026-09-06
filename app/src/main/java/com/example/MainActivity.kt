@@ -125,11 +125,15 @@ fun BestNetApp(
 
     // 4. Intercom Screen
     composable(NavRoutes.INTERCOM) {
+      val myExtension by viewModel.myExtension.collectAsStateWithLifecycle()
+      val directory by viewModel.intercomDirectory.collectAsStateWithLifecycle()
       IntercomScreen(
         staffList = viewModel.intercomStaff,
         neighborsList = viewModel.intercomNeighbors,
         onBackClick = { navController.popBackStack() },
-        onCallContact = { contact -> viewModel.startCall(contact) }
+        onCallContact = { contact -> viewModel.startCall(contact) },
+        myExtension = myExtension,
+        directory = directory,
       )
     }
 

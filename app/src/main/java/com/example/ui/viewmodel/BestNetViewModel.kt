@@ -76,6 +76,14 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
   private val _emergencyContacts = MutableStateFlow<List<EmergencyContactDto>?>(null)
   val emergencyContacts: StateFlow<List<EmergencyContactDto>?> = _emergencyContacts.asStateFlow()
 
+  /** The resident's own extension, from GET /me/intercom. */
+  private val _myExtension = MutableStateFlow<String?>(null)
+  val myExtension: StateFlow<String?> = _myExtension.asStateFlow()
+
+  /** Neighbours' extensions. null = not loaded, empty = nobody else has one. */
+  private val _intercomDirectory = MutableStateFlow<List<IntercomContact>?>(null)
+  val intercomDirectory: StateFlow<List<IntercomContact>?> = _intercomDirectory.asStateFlow()
+
   private val _snackbarMessage = MutableStateFlow<String?>(null)
   val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
 
@@ -221,6 +229,18 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
       _subscriptions.value = sessionRepository.mySubscriptions()
       _events.value = sessionRepository.myEvents()
       _emergencyContacts.value = sessionRepository.myEmergencyContacts()
+      _myExtension.value = sessionRepository.myIntercom()?.sipUsername
+      _intercomDirectory.value = sessionRepository.intercomDirectory().map { entry ->
+        IntercomContact(
+          id = entry.id,
+          // The server sends no names, by design — the unit is the identity.
+          name = "Unit ${entry.unitLabel}",
+          role = "Resident",
+          extension = entry.extension,
+          isStaff = false,
+          unit = entry.unitLabel,
+        )
+      }
     }
   }
 
@@ -391,8 +411,20 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
     }
   }
 
+  /**
+   * Tapping "Call" tells the resident what to dial. It does not place a call.
+   *
+   * This used to open the in-call sheet — a full calling UI with mute and
+   * speaker controls — while no call existed anywhere. The app has no SIP
+   * stack, so it cannot place one; the PBX and the extensions are real, but the
+   * dialling happens in a SIP app such as Zoiper or Linphone.
+   *
+   * TODO: embedding a SIP client (linphone-sdk or PJSIP) is what would make
+   * this button do what it says.
+   */
   fun startCall(contact: IntercomContact) {
-    _activeCallContact.value = contact
+    _snackbarMessage.value =
+      "Dial ${contact.extension} from your SIP app — in-app calling isn't built yet"
   }
 
   fun endCall() {

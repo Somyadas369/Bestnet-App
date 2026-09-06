@@ -62,7 +62,12 @@ fun IntercomScreen(
   staffList: List<IntercomContact>,
   neighborsList: List<IntercomContact> = emptyList(),
   onBackClick: () -> Unit,
-  onCallContact: (IntercomContact) -> Unit
+  onCallContact: (IntercomContact) -> Unit,
+  // The resident's own extension, and the directory of extensions they can
+  // dial. Both come from the server; null means "still loading", which the UI
+  // distinguishes from "nobody has one".
+  myExtension: String? = null,
+  directory: List<IntercomContact>? = null,
 ) {
   var selectedPill by remember { mutableStateOf("Call") }
   var searchQuery by remember { mutableStateOf("") }
@@ -70,6 +75,14 @@ fun IntercomScreen(
   val filteredStaff = remember(searchQuery, staffList) {
     if (searchQuery.isBlank()) staffList
     else staffList.filter { it.name.contains(searchQuery, ignoreCase = true) || it.role.contains(searchQuery, ignoreCase = true) }
+  }
+
+  val filteredDirectory = remember(searchQuery, directory) {
+    val all = directory.orEmpty()
+    if (searchQuery.isBlank()) all
+    else all.filter {
+      it.name.contains(searchQuery, ignoreCase = true) || it.extension.contains(searchQuery)
+    }
   }
 
   Column(
@@ -118,7 +131,7 @@ fun IntercomScreen(
         OutlinedTextField(
           value = searchQuery,
           onValueChange = { searchQuery = it },
-          placeholder = { Text("Search Gate or Management...", fontSize = 13.5.sp, color = BestNetMuted) },
+          placeholder = { Text("Search by unit or extension...", fontSize = 13.5.sp, color = BestNetMuted) },
           leadingIcon = {
             Icon(Icons.Default.Search, contentDescription = null, tint = BestNetMuted, modifier = Modifier.size(20.dp))
           },
@@ -184,6 +197,48 @@ fun IntercomScreen(
               )
             }
           }
+        }
+      }
+
+      // The resident's own extension. Shown prominently because in-app calling
+      // does not exist — this is the number they type into their SIP app, and
+      // the number a neighbour would dial to reach them.
+      item {
+        MyExtensionCard(extension = myExtension)
+      }
+
+      // Neighbours, from GET /me/intercom-directory. The server sends unit
+      // labels and extensions only — no names or phone numbers.
+      item {
+        Text(
+          text = "Directory",
+          fontSize = 14.sp,
+          fontWeight = FontWeight.Bold,
+          color = BestNetInk,
+          modifier = Modifier.padding(top = 4.dp)
+        )
+      }
+
+      if (directory == null) {
+        item { Text("Loading…", fontSize = 13.sp, color = BestNetMuted) }
+      } else if (filteredDirectory.isEmpty()) {
+        item {
+          Text(
+            if (searchQuery.isBlank())
+              "No other homes in your community have an intercom extension yet."
+            else "No match for \"$searchQuery\".",
+            fontSize = 13.sp,
+            color = BestNetMuted,
+          )
+        }
+      } else {
+        items(filteredDirectory) { contact ->
+          IntercomContactRow(
+            name = contact.name,
+            role = "Extension ${contact.extension}",
+            icon = Icons.Default.Apartment,
+            onCallClick = { onCallContact(contact) }
+          )
         }
       }
 
@@ -288,6 +343,42 @@ fun IntercomContactRow(
           contentDescription = "Call",
           tint = BestNetGreen,
           modifier = Modifier.size(20.dp)
+        )
+      }
+    }
+  }
+}
+
+/**
+ * The resident's own extension, plus the connection details a SIP app needs.
+ *
+ * This is here because the app cannot place calls itself — there is no SIP
+ * stack in it. Showing the extension and server is the honest, useful thing:
+ * it is what the resident types into Zoiper or Linphone, and what a neighbour
+ * dials to reach them.
+ */
+@Composable
+private fun MyExtensionCard(extension: String?) {
+  Card(
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(14.dp),
+    colors = CardDefaults.cardColors(containerColor = BestNetSurface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+  ) {
+    Column(modifier = Modifier.padding(16.dp)) {
+      Text("My extension", fontSize = 12.sp, color = BestNetMuted, fontWeight = FontWeight.Medium)
+      Text(
+        text = extension ?: "Not set up for this home",
+        fontSize = if (extension != null) 26.sp else 15.sp,
+        fontWeight = FontWeight.Bold,
+        color = if (extension != null) BestNetGreen else BestNetMuted,
+      )
+      if (extension != null) {
+        Text(
+          "pbx.bestnet.in · port 5061 · TLS",
+          fontSize = 12.sp,
+          color = BestNetMuted,
+          modifier = Modifier.padding(top = 2.dp),
         )
       }
     }

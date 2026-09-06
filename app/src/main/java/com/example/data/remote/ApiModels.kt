@@ -159,6 +159,17 @@ data class VisitorVisitDto(
 @JsonClass(generateAdapter = true)
 data class CancelVisitBody(val reason: String? = null)
 
+/**
+ * An extension the resident can dial. Carries the unit label and number only —
+ * the server deliberately does not expose neighbours' names or phone numbers.
+ */
+@JsonClass(generateAdapter = true)
+data class IntercomDirectoryEntryDto(
+  val id: String,
+  val extension: String,
+  val unitLabel: String,
+)
+
 @JsonClass(generateAdapter = true)
 data class ServicePlanDto(
   val id: String,

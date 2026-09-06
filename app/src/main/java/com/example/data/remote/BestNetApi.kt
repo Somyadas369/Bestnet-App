@@ -43,6 +43,10 @@ interface BestNetApi {
   @GET("me/intercom")
   suspend fun getMyIntercom(): List<IntercomEndpointDto>
 
+  /** Extensions the resident can dial in their own communities. */
+  @GET("me/intercom-directory")
+  suspend fun getIntercomDirectory(): List<IntercomDirectoryEntryDto>
+
   /**
    * Ticket categories carry per-tenant SLA targets, so the ids differ per
    * tenant and cannot be hard-coded in the app. The tenant id comes from

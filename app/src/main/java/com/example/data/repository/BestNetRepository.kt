@@ -108,14 +108,20 @@ class BestNetRepository(private val dao: BestNetDao) {
     dao.deleteCommunityNotice(id)
   }
 
-  fun getIntercomStaff(): List<IntercomContact> {
-    return listOf(
-      IntercomContact(id = "mg", name = "Main Gate", role = "Main Gate Security Desk", extension = "101", isStaff = true),
-      IntercomContact(id = "mgmt", name = "Management Office", role = "Society Administration & Facility Office", extension = "103", isStaff = true)
-    )
-  }
+  /**
+   * Empty on purpose.
+   *
+   * This used to return "Main Gate" on extension 101 and "Management Office" on
+   * 103. Neither exists: real extensions are the 6-digit sipUsername the backend
+   * generates, and no gate or office endpoint has ever been provisioned.
+   * Dialling either would have reached nothing.
+   *
+   * Gate and management stations become real the moment someone provisions
+   * endpoints for them — at which point they arrive through
+   * GET /me/intercom-directory like any other extension, and this can go.
+   */
+  fun getIntercomStaff(): List<IntercomContact> = emptyList()
 
-  fun getIntercomNeighbors(): List<IntercomContact> {
-    return emptyList()
-  }
+  /** Superseded by the server directory — see BestNetViewModel.intercomDirectory. */
+  fun getIntercomNeighbors(): List<IntercomContact> = emptyList()
 }
