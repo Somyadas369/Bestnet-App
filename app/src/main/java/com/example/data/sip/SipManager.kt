@@ -66,7 +66,18 @@ class SipManager(private val context: Context) {
   private val _speaker = MutableStateFlow(false)
   val speaker: StateFlow<Boolean> = _speaker.asStateFlow()
 
-  private val listener = object : CoreListenerStub() {
+  /**
+   * Lazy on purpose.
+   *
+   * This is an anonymous subclass of a linphone class, so *constructing* it
+   * forces linphone's classes to load, which loads the native library. The
+   * ViewModel builds a SipManager at startup, so an eager listener meant a
+   * device that cannot load the native libs — a 32-bit phone, a stripped ABI —
+   * crashed before the app drew anything. Calling should degrade, not take the
+   * whole app with it.
+   */
+  private val listener: CoreListenerStub by lazy {
+    object : CoreListenerStub() {
     override fun onAccountRegistrationStateChanged(
       core: Core,
       account: Account,
@@ -102,13 +113,25 @@ class SipManager(private val context: Context) {
         _muted.value = false
         _speaker.value = false
       }
+      }
     }
   }
 
-  /** Idempotent: safe to call on every app start. */
+  /** True when the SIP stack could not be initialised on this device. */
+  private val _unavailable = MutableStateFlow(false)
+  val unavailable: StateFlow<Boolean> = _unavailable.asStateFlow()
+
+  /**
+   * Idempotent: safe to call on every app start.
+   *
+   * Failures are caught rather than thrown. Loading a native library can fail
+   * for reasons the app cannot fix at runtime — an ABI that wasn't shipped,
+   * a device with no working audio stack — and none of them are a reason for
+   * a resident to lose the whole app.
+   */
   @Synchronized
   fun start() {
-    if (core != null) return
+    if (core != null || _unavailable.value) return
     try {
       // 5.5 has no setLogLevel on Factory; this is the toggle that exists.
       // Off by default so SIP traffic — including auth headers — doesn't land in
@@ -123,8 +146,12 @@ class SipManager(private val context: Context) {
       created.isAutoIterateEnabled = true
       created.start()
       core = created
-    } catch (t: Throwable) {
-      Log.e(TAG, "Failed to initialize linphone Core safely", t)
+    } catch (err: Throwable) {
+      // Throwable, not Exception: a missing native library surfaces as
+      // UnsatisfiedLinkError, which is an Error. Latched so every later call
+      // doesn't retry an initialisation that cannot succeed on this device.
+      Log.e(TAG, "SIP stack unavailable on this device", err)
+      _unavailable.value = true
     }
   }
 

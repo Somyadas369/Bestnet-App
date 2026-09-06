@@ -24,13 +24,17 @@ android {
 
     ndk {
       // linphone-sdk ships native libraries for four ABIs, taking the debug APK
-      // from 26 MB to 176 MB. Restricting to arm64 brings it to 73 MB, and
-      // every phone shipped since roughly 2017 is arm64.
+      // from 26 MB to 176 MB. An app that will not start is worse than a large
+      // download, so correctness wins here.
       //
-      // Two caveats:
-      //  - "x86_64" is required to run on the streaming emulator.
-      //  - "arm64-v8a" is required for modern Android physical devices.
-      abiFilters += listOf("arm64-v8a", "x86_64")
+      // All three are kept:
+      //  - x86_64      the emulator
+      //  - arm64-v8a   modern physical phones
+      //  - armeabi-v7a 32-bit phones, still common in this market
+      //
+      // The cost is download size. For release, ship an App Bundle instead and
+      // Play delivers only the ABI each device needs, at no size cost.
+      abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
     }
   }
 
