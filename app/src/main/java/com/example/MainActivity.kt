@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -43,11 +44,16 @@ class MainActivity : ComponentActivity() {
    * which looks like a broken PBX rather than a missing permission.
    * POST_NOTIFICATIONS (API 33+) is requested alongside so an incoming-call
    * notification isn't silently dropped.
+   *
+   * Requested when the resident turns calling on, not at launch. Asking at
+   * launch put a system dialog over a window that had not drawn its first frame
+   * yet, and it is poor practice besides: a permission prompt with no context
+   * is one most people decline.
    */
   private val permissionLauncher =
     registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
-  private fun requestCallPermissions() {
+  fun requestCallPermissions() {
     val needed = mutableListOf<String>()
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
       != PackageManager.PERMISSION_GRANTED
@@ -62,7 +68,6 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
-    requestCallPermissions()
     setContent {
       MyApplicationTheme {
         Surface(
@@ -80,6 +85,7 @@ class MainActivity : ComponentActivity() {
 fun BestNetApp(
   viewModel: BestNetViewModel = viewModel()
 ) {
+  val context = LocalContext.current
   val navController = rememberNavController()
   val allComplaints by viewModel.allComplaints.collectAsStateWithLifecycle()
   val allVisitors by viewModel.allVisitors.collectAsStateWithLifecycle()
@@ -170,7 +176,11 @@ fun BestNetApp(
         sipConfigured = viewModel.sipConfigured,
         sipBusy = sipBusy,
         sipError = sipError,
-        onEnableCalling = { viewModel.enableSipCalling { } },
+        onEnableCalling = {
+          // Ask for the microphone at the moment it becomes relevant.
+          (context as? MainActivity)?.requestCallPermissions()
+          viewModel.enableSipCalling { }
+        },
       )
     }
 
