@@ -1,7 +1,12 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,9 +36,33 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.BestNetViewModel
 
 class MainActivity : ComponentActivity() {
+
+  /**
+   * RECORD_AUDIO is a runtime permission. Declaring it in the manifest is not
+   * enough — without the grant a call connects and carries no audio at all,
+   * which looks like a broken PBX rather than a missing permission.
+   * POST_NOTIFICATIONS (API 33+) is requested alongside so an incoming-call
+   * notification isn't silently dropped.
+   */
+  private val permissionLauncher =
+    registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+
+  private fun requestCallPermissions() {
+    val needed = mutableListOf<String>()
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+      != PackageManager.PERMISSION_GRANTED
+    ) needed += Manifest.permission.RECORD_AUDIO
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+      != PackageManager.PERMISSION_GRANTED
+    ) needed += Manifest.permission.POST_NOTIFICATIONS
+    if (needed.isNotEmpty()) permissionLauncher.launch(needed.toTypedArray())
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    requestCallPermissions()
     setContent {
       MyApplicationTheme {
         Surface(
@@ -127,6 +156,9 @@ fun BestNetApp(
     composable(NavRoutes.INTERCOM) {
       val myExtension by viewModel.myExtension.collectAsStateWithLifecycle()
       val directory by viewModel.intercomDirectory.collectAsStateWithLifecycle()
+      val sipRegistration by viewModel.sipRegistration.collectAsStateWithLifecycle()
+      val sipBusy by viewModel.sipBusy.collectAsStateWithLifecycle()
+      val sipError by viewModel.sipError.collectAsStateWithLifecycle()
       IntercomScreen(
         staffList = viewModel.intercomStaff,
         neighborsList = viewModel.intercomNeighbors,
@@ -134,6 +166,11 @@ fun BestNetApp(
         onCallContact = { contact -> viewModel.startCall(contact) },
         myExtension = myExtension,
         directory = directory,
+        registration = sipRegistration,
+        sipConfigured = viewModel.sipConfigured,
+        sipBusy = sipBusy,
+        sipError = sipError,
+        onEnableCalling = { viewModel.enableSipCalling { } },
       )
     }
 

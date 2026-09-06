@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -316,11 +317,21 @@ fun SpeedTestDialog(
 fun InCallBottomSheet(
   contactName: String,
   contactRole: String,
-  onEndCall: () -> Unit
+  onEndCall: () -> Unit,
+  // Driven by the SIP stack rather than by local state. Previously the mute and
+  // speaker buttons only toggled their own icons — there was no call to mute.
+  statusText: String = "Connected",
+  isMuted: Boolean = false,
+  isSpeaker: Boolean = false,
+  onToggleMute: (Boolean) -> Unit = {},
+  onToggleSpeaker: (Boolean) -> Unit = {},
+  showAnswer: Boolean = false,
+  onAnswer: () -> Unit = {},
+  // The timer only advances while the call is actually up, so a ringing call
+  // doesn't show a duration.
+  countUp: Boolean = true,
 ) {
   var callDuration by remember { mutableIntStateOf(0) }
-  var isMuted by remember { mutableStateOf(false) }
-  var isSpeaker by remember { mutableStateOf(false) }
   val pulseTransition = rememberInfiniteTransition(label = "pulse")
   val pulseScale by pulseTransition.animateFloat(
     initialValue = 0.95f,
@@ -332,7 +343,10 @@ fun InCallBottomSheet(
     label = "scale"
   )
 
-  LaunchedEffect(Unit) {
+  // Only counts while the call is actually connected — a ringing call showing
+  // 00:07 would read as seven seconds of conversation that never happened.
+  LaunchedEffect(countUp) {
+    if (!countUp) return@LaunchedEffect
     while (true) {
       delay(1000)
       callDuration++
@@ -402,7 +416,10 @@ fun InCallBottomSheet(
       )
       Spacer(modifier = Modifier.height(6.dp))
       Text(
-        text = timeFormatted,
+        // "Ringing…" / "Calling…" until the media is actually up; only then a
+        // duration, so the screen never implies a conversation is in progress
+        // before one is.
+        text = if (countUp) timeFormatted else statusText,
         fontSize = 15.sp,
         fontWeight = FontWeight.SemiBold,
         color = BestNetGreen
@@ -417,7 +434,7 @@ fun InCallBottomSheet(
       ) {
         // Mute button
         IconButton(
-          onClick = { isMuted = !isMuted },
+          onClick = { onToggleMute(!isMuted) },
           modifier = Modifier
             .size(52.dp)
             .clip(CircleShape)
@@ -430,7 +447,26 @@ fun InCallBottomSheet(
           )
         }
 
-        // End Call button
+        // Answer, for an incoming call. Absent on outgoing calls, where there
+        // is nothing to accept.
+        if (showAnswer) {
+          IconButton(
+            onClick = onAnswer,
+            modifier = Modifier
+              .size(64.dp)
+              .clip(CircleShape)
+              .background(BestNetGreen)
+          ) {
+            Icon(
+              imageVector = Icons.Default.Call,
+              contentDescription = "Answer",
+              tint = Color.White,
+              modifier = Modifier.size(32.dp)
+            )
+          }
+        }
+
+        // End Call button — also declines a ringing call.
         IconButton(
           onClick = onEndCall,
           modifier = Modifier
@@ -440,7 +476,7 @@ fun InCallBottomSheet(
         ) {
           Icon(
             imageVector = Icons.Default.CallEnd,
-            contentDescription = "End Call",
+            contentDescription = if (showAnswer) "Decline" else "End Call",
             tint = Color.White,
             modifier = Modifier.size(32.dp)
           )
@@ -448,7 +484,7 @@ fun InCallBottomSheet(
 
         // Speaker button
         IconButton(
-          onClick = { isSpeaker = !isSpeaker },
+          onClick = { onToggleSpeaker(!isSpeaker) },
           modifier = Modifier
             .size(52.dp)
             .clip(CircleShape)

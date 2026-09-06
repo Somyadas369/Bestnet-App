@@ -46,6 +46,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
+import com.example.data.sip.SipRegistration
 import com.example.data.model.IntercomContact
 import com.example.ui.components.DetailTopBar
 import com.example.ui.theme.BestNetBackground
@@ -68,7 +73,13 @@ fun IntercomScreen(
   // distinguishes from "nobody has one".
   myExtension: String? = null,
   directory: List<IntercomContact>? = null,
+  registration: SipRegistration = SipRegistration.NONE,
+  sipConfigured: Boolean = false,
+  sipBusy: Boolean = false,
+  sipError: String? = null,
+  onEnableCalling: () -> Unit = {},
 ) {
+  var showEnableDialog by remember { mutableStateOf(false) }
   var selectedPill by remember { mutableStateOf("Call") }
   var searchQuery by remember { mutableStateOf("") }
 
@@ -204,7 +215,21 @@ fun IntercomScreen(
       // does not exist — this is the number they type into their SIP app, and
       // the number a neighbour would dial to reach them.
       item {
-        MyExtensionCard(extension = myExtension)
+        MyExtensionCard(
+          extension = myExtension,
+          registration = registration,
+          sipConfigured = sipConfigured,
+          sipBusy = sipBusy,
+          onEnableCalling = { showEnableDialog = true },
+        )
+        if (sipError != null) {
+          Text(
+            sipError,
+            color = Color(0xFFDC2626),
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 6.dp),
+          )
+        }
       }
 
       // Neighbours, from GET /me/intercom-directory. The server sends unit
@@ -272,6 +297,38 @@ fun IntercomScreen(
         Spacer(modifier = Modifier.height(24.dp))
       }
     }
+  }
+
+  // The consequence has to be stated before it happens, not explained after:
+  // enabling calling resets the SIP password, which signs out every other
+  // device on this extension.
+  if (showEnableDialog) {
+    AlertDialog(
+      onDismissRequest = { if (!sipBusy) showEnableDialog = false },
+      title = { Text("Turn on calling here?", fontWeight = FontWeight.Bold) },
+      text = {
+        Text(
+          "This device will be able to make and receive intercom calls.\n\n" +
+            "Any other device signed in to this extension — a softphone, another " +
+            "handset — will be signed out and needs setting up again.",
+          fontSize = 13.sp,
+          color = BestNetMuted,
+        )
+      },
+      confirmButton = {
+        Button(
+          onClick = { onEnableCalling(); showEnableDialog = false },
+          enabled = !sipBusy,
+          colors = ButtonDefaults.buttonColors(containerColor = BestNetGreen),
+        ) { Text(if (sipBusy) "Setting up…" else "Turn on") }
+      },
+      dismissButton = {
+        TextButton(onClick = { showEnableDialog = false }, enabled = !sipBusy) {
+          Text("Cancel", color = BestNetMuted)
+        }
+      },
+      containerColor = BestNetSurface,
+    )
   }
 }
 
@@ -358,7 +415,13 @@ fun IntercomContactRow(
  * dials to reach them.
  */
 @Composable
-private fun MyExtensionCard(extension: String?) {
+private fun MyExtensionCard(
+  extension: String?,
+  registration: SipRegistration,
+  sipConfigured: Boolean,
+  sipBusy: Boolean,
+  onEnableCalling: () -> Unit,
+) {
   Card(
     modifier = Modifier.fillMaxWidth(),
     shape = RoundedCornerShape(14.dp),
@@ -375,11 +438,31 @@ private fun MyExtensionCard(extension: String?) {
       )
       if (extension != null) {
         Text(
-          "pbx.bestnet.in · port 5061 · TLS",
+          when {
+            registration == SipRegistration.REGISTERED -> "Calling is on — you can be reached here"
+            registration == SipRegistration.PROGRESS -> "Connecting…"
+            registration == SipRegistration.FAILED -> "Couldn't connect to the phone system"
+            sipConfigured -> "Calling is set up but not connected"
+            else -> "Calling is off on this device"
+          },
           fontSize = 12.sp,
-          color = BestNetMuted,
+          color = if (registration == SipRegistration.REGISTERED) BestNetGreen else BestNetMuted,
           modifier = Modifier.padding(top = 2.dp),
         )
+        Text(
+          "pbx.bestnet.in · port 5061 · TLS",
+          fontSize = 11.sp,
+          color = BestNetMuted,
+        )
+        if (!sipConfigured) {
+          Spacer(modifier = Modifier.height(10.dp))
+          Button(
+            onClick = onEnableCalling,
+            enabled = !sipBusy,
+            colors = ButtonDefaults.buttonColors(containerColor = BestNetGreen),
+            shape = RoundedCornerShape(10.dp),
+          ) { Text(if (sipBusy) "Setting up…" else "Turn on calling here", fontSize = 13.sp) }
+        }
       }
     }
   }

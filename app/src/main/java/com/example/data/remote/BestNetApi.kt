@@ -48,6 +48,17 @@ interface BestNetApi {
   suspend fun getIntercomDirectory(): List<IntercomDirectoryEntryDto>
 
   /**
+   * Issues a new SIP password and returns it **once**.
+   *
+   * This is the only way the app can obtain a password to register with: the
+   * server stores it one-way hashed and cannot hand back the existing one.
+   * Side effect: every device currently registered on this extension is
+   * disconnected, so this must only run on explicit user action.
+   */
+  @POST("intercom-endpoints/{id}/password-reset")
+  suspend fun resetSipPassword(@Path("id") endpointId: String): IntercomEndpointDto
+
+  /**
    * Ticket categories carry per-tenant SLA targets, so the ids differ per
    * tenant and cannot be hard-coded in the app. The tenant id comes from
    * `/me/units` (community.tenantId).

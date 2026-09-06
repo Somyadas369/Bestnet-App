@@ -14,7 +14,11 @@ import com.example.data.repository.BestNetRepository
 import com.example.data.remote.CommunityEventDto
 import com.example.data.remote.EmergencyContactDto
 import com.example.data.remote.SubscriptionDto
+import com.example.BestNetApp
 import com.example.data.repository.SessionRepository
+import com.example.data.sip.SipCallInfo
+import com.example.data.sip.SipManager
+import com.example.data.sip.SipRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -84,6 +88,23 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
   private val _intercomDirectory = MutableStateFlow<List<IntercomContact>?>(null)
   val intercomDirectory: StateFlow<List<IntercomContact>?> = _intercomDirectory.asStateFlow()
 
+  // SIP. The manager is process-wide (held by the Application) because a
+  // linphone Core owns native resources and a single registration.
+  private val sipManager: SipManager = BestNetApp.sipManager(application)
+  val sipRegistration: StateFlow<SipRegistration> = sipManager.registration
+  val sipCall: StateFlow<SipCallInfo> = sipManager.call
+  val sipMuted: StateFlow<Boolean> = sipManager.muted
+  val sipSpeaker: StateFlow<Boolean> = sipManager.speaker
+
+  private val _sipBusy = MutableStateFlow(false)
+  val sipBusy: StateFlow<Boolean> = _sipBusy.asStateFlow()
+
+  private val _sipError = MutableStateFlow<String?>(null)
+  val sipError: StateFlow<String?> = _sipError.asStateFlow()
+
+  /** True once this device holds SIP credentials, whether or not it's registered. */
+  val sipConfigured: Boolean get() = sessionRepository.storedSipCredentials() != null
+
   private val _snackbarMessage = MutableStateFlow<String?>(null)
   val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
 
@@ -111,7 +132,12 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
     // returning user skips login and a new one cannot walk straight into the
     // app without authenticating.
     _isLoggedIn.value = sessionRepository.isLoggedIn
-    if (_isLoggedIn.value) refreshFromServer()
+    if (_isLoggedIn.value) {
+      refreshFromServer()
+      // A device that was already set up should be reachable straight away,
+      // without the resident opening the Intercom screen first.
+      registerSipIfPossible()
+    }
 
     // No placeholder identity: an invented "Rahul Sharma" would be shown as
     // though it were the signed-in user during the first frames after login.
@@ -246,6 +272,7 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
 
   fun logout() {
     viewModelScope.launch {
+      sipManager.unregister()
       sessionRepository.logout()
       // In-memory lists are not in Room, so clearing the database doesn't touch
       // them — without this the next account would briefly see the previous
@@ -412,22 +439,68 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
   }
 
   /**
-   * Tapping "Call" tells the resident what to dial. It does not place a call.
+   * Places a real SIP call, if this device is registered.
    *
-   * This used to open the in-call sheet — a full calling UI with mute and
-   * speaker controls — while no call existed anywhere. The app has no SIP
-   * stack, so it cannot place one; the PBX and the extensions are real, but the
-   * dialling happens in a SIP app such as Zoiper or Linphone.
-   *
-   * TODO: embedding a SIP client (linphone-sdk or PJSIP) is what would make
-   * this button do what it says.
+   * An unregistered device genuinely cannot place the call, so it says so and
+   * offers the extension instead — better than a button that appears dead.
    */
   fun startCall(contact: IntercomContact) {
-    _snackbarMessage.value =
-      "Dial ${contact.extension} from your SIP app — in-app calling isn't built yet"
+    if (sipManager.registration.value != SipRegistration.REGISTERED) {
+      _snackbarMessage.value =
+        "Calling isn't set up on this device — turn it on from Intercom, or dial ${contact.extension} from a SIP app"
+      return
+    }
+    _activeCallContact.value = contact
+    sipManager.callExtension(contact.extension)
   }
 
+  /**
+   * Turns on in-app calling for this device.
+   *
+   * Resets the SIP password as a side effect, because the server only returns a
+   * plaintext password when it issues one — so every other device on this
+   * extension is disconnected. The UI warns before calling this.
+   */
+  fun enableSipCalling(onResult: (Boolean) -> Unit) {
+    _sipBusy.value = true
+    _sipError.value = null
+    viewModelScope.launch {
+      sessionRepository.enableSipCalling()
+        .onSuccess {
+          _sipBusy.value = false
+          registerSipIfPossible()
+          onResult(true)
+        }
+        .onFailure {
+          _sipBusy.value = false
+          _sipError.value = it.message ?: "Could not set up calling on this device"
+          onResult(false)
+        }
+    }
+  }
+
+  /** Registers with the PBX when credentials are already stored on this device. */
+  fun registerSipIfPossible() {
+    val creds = sessionRepository.storedSipCredentials() ?: return
+    sipManager.register(
+      extension = creds.extension,
+      password = creds.password,
+      domain = creds.domain,
+      port = creds.port,
+      useTls = creds.transport.equals("TLS", ignoreCase = true),
+    )
+  }
+
+  fun answerCall() = sipManager.answer()
+
+  fun setMuted(value: Boolean) = sipManager.setMuted(value)
+
+  fun setSpeaker(value: Boolean) = sipManager.setSpeaker(value)
+
+  fun acknowledgeCallEnded() = sipManager.acknowledgeCallEnded()
+
   fun endCall() {
+    sipManager.hangUp()
     _activeCallContact.value = null
   }
 

@@ -95,6 +95,12 @@ data class IntercomEndpointDto(
   val status: String? = null,
   val type: String? = null,
   val serverProfile: SipServerProfileDto? = null,
+  /**
+   * Present only in the response to a provision or password-reset call — the
+   * server returns the plaintext once and stores only a hash. Always null on
+   * GET /me/intercom.
+   */
+  val sipPassword: String? = null,
 )
 
 @JsonClass(generateAdapter = true)

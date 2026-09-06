@@ -5,7 +5,41 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- SIP calling. RECORD_AUDIO is a runtime permission and must be granted
+         before a call can carry audio; MODIFY_AUDIO_SETTINGS lets the app switch
+         between earpiece and speaker. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- A call must keep running with the screen off and the app backgrounded,
+         which on modern Android means a foreground service. The MICROPHONE
+         subtype is required from API 34. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Runtime permission from API 33; without it the ongoing-call notification
+         the foreground service posts is silently dropped. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Telephony is optional: the app is fully usable without a SIP extension,
+         so a device without a microphone shouldn't be excluded from Play. -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- linphone-sdk's own manifest declares permissions for features this app
+         does not use — it supports video calling, so it asks for CAMERA. Merged
+         in unchallenged, the intercom would prompt for camera access and Play
+         would require a justification for a permission nothing reads.
+         Stripped explicitly; BestNet intercom is voice-only. Removing these
+         would break video calling if it is ever added — that change should be
+         deliberate. -->
+    <uses-permission android:name="android.permission.CAMERA" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" tools:node="remove" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" tools:node="remove" />
+    <uses-feature android:name="android.hardware.camera" tools:node="remove" />
+    <uses-feature android:name="android.hardware.camera.autofocus" tools:node="remove" />
+
     <application
+        android:name=".BestNetApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"

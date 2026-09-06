@@ -21,6 +21,21 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    ndk {
+      // linphone-sdk ships native libraries for four ABIs, taking the debug APK
+      // from 26 MB to 176 MB. Restricting to arm64 brings it to 73 MB, and
+      // every phone shipped since roughly 2017 is arm64.
+      //
+      // Two caveats:
+      //  - Add "x86_64" back to run on an emulator. Without it the app installs
+      //    and then dies on the first SIP call with an UnsatisfiedLinkError,
+      //    which does not look like a missing ABI.
+      //  - Add "armeabi-v7a" back for older 32-bit phones, or better, ship an
+      //    App Bundle for release and let Play deliver per-device native libs —
+      //    that restores every ABI at no download-size cost.
+      abiFilters += listOf("arm64-v8a")
+    }
   }
 
   signingConfigs {
@@ -105,6 +120,9 @@ dependencies {
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.security.crypto)
+  implementation(libs.linphone.sdk.android)
+  // Overrides the fragment 1.1.0 that linphone-sdk drags in — see libs.versions.toml.
+  implementation(libs.androidx.fragment)
   coreLibraryDesugaring(libs.desugar.jdk.libs)
   // implementation(libs.coil.compose)
   implementation(libs.converter.moshi)

@@ -238,6 +238,48 @@ class SessionRepository(context: Context, private val dao: BestNetDao) {
     client.call { getIntercomDirectory() }.getOrDefault(emptyList())
 
   /**
+   * Obtains SIP credentials so this device can register and take calls.
+   *
+   * The server hashes the SIP password and returns the plaintext only when it
+   * issues one, so the *only* way to get a usable password is to reset it. That
+   * has a real consequence the caller must have consented to first: every other
+   * device registered on this extension — a softphone on a laptop, a second
+   * handset — is disconnected and has to be set up again.
+   *
+   * Because of that this never runs automatically. `hasSipCredentials` is
+   * checked first, and a device that already has a password just reuses it.
+   */
+  suspend fun enableSipCalling(): Result<Unit> {
+    if (tokenStore.hasSipCredentials) return Result.success(Unit)
+
+    val endpoint = client.call { getMyIntercom() }
+      .getOrElse { return Result.failure(it) }
+      .firstOrNull { it.status == "ACTIVE" }
+      ?: return Result.failure(
+        IllegalStateException("This home has no intercom extension yet — ask your community office to set one up"),
+      )
+
+    val issued = client.call { resetSipPassword(endpoint.id) }.getOrElse { return Result.failure(it) }
+    val password = issued.sipPassword
+      ?: return Result.failure(IllegalStateException("The server did not return a SIP password"))
+
+    tokenStore.sipExtension = issued.sipUsername
+    tokenStore.sipPassword = password
+    tokenStore.sipDomain = issued.serverProfile?.domain ?: endpoint.serverProfile?.domain
+    tokenStore.sipPort = issued.serverProfile?.port ?: endpoint.serverProfile?.port ?: 5061
+    tokenStore.sipTransport = issued.serverProfile?.transport ?: endpoint.serverProfile?.transport
+    return Result.success(Unit)
+  }
+
+  /** Credentials for the SIP stack, or null if calling isn't set up here. */
+  fun storedSipCredentials(): SipCredentials? {
+    val ext = tokenStore.sipExtension ?: return null
+    val pw = tokenStore.sipPassword ?: return null
+    val domain = tokenStore.sipDomain ?: return null
+    return SipCredentials(ext, pw, domain, tokenStore.sipPort, tokenStore.sipTransport ?: "TLS")
+  }
+
+  /**
    * Ends the session server-side, then locally. The local clear happens even if
    * the network call fails — a user who taps Logout must end up logged out.
    */
@@ -266,6 +308,14 @@ class SessionRepository(context: Context, private val dao: BestNetDao) {
     const val TAG = "SessionRepository"
   }
 }
+
+data class SipCredentials(
+  val extension: String,
+  val password: String,
+  val domain: String,
+  val port: Int,
+  val transport: String,
+)
 
 /**
  * Matches a UI category tile to a server ticket category.

@@ -67,6 +67,39 @@ class TokenStore(context: Context) {
     get() = prefs.getString(KEY_TENANT, null)
     set(value) = prefs.edit().putString(KEY_TENANT, value).apply()
 
+  /**
+   * SIP credentials for in-app calling.
+   *
+   * The server stores the SIP password one-way hashed and returns the plaintext
+   * exactly once, at provisioning or password reset — so once it is issued,
+   * this device is the only place it exists. Losing it means resetting, which
+   * disconnects every other device on the extension.
+   *
+   * Encrypted at rest with the tokens, for the same reason.
+   */
+  var sipExtension: String?
+    get() = prefs.getString(KEY_SIP_EXT, null)
+    set(value) = prefs.edit().putString(KEY_SIP_EXT, value).apply()
+
+  var sipPassword: String?
+    get() = prefs.getString(KEY_SIP_PW, null)
+    set(value) = prefs.edit().putString(KEY_SIP_PW, value).apply()
+
+  var sipDomain: String?
+    get() = prefs.getString(KEY_SIP_DOMAIN, null)
+    set(value) = prefs.edit().putString(KEY_SIP_DOMAIN, value).apply()
+
+  var sipPort: Int
+    get() = prefs.getInt(KEY_SIP_PORT, 5061)
+    set(value) = prefs.edit().putInt(KEY_SIP_PORT, value).apply()
+
+  var sipTransport: String?
+    get() = prefs.getString(KEY_SIP_TRANSPORT, null)
+    set(value) = prefs.edit().putString(KEY_SIP_TRANSPORT, value).apply()
+
+  val hasSipCredentials: Boolean
+    get() = !sipExtension.isNullOrBlank() && !sipPassword.isNullOrBlank()
+
   val isLoggedIn: Boolean get() = !accessToken.isNullOrBlank()
 
   fun save(tokens: TokensDto) {
@@ -83,6 +116,11 @@ class TokenStore(context: Context) {
       .remove(KEY_MEMBERSHIP)
       .remove(KEY_UNIT)
       .remove(KEY_TENANT)
+      .remove(KEY_SIP_EXT)
+      .remove(KEY_SIP_PW)
+      .remove(KEY_SIP_DOMAIN)
+      .remove(KEY_SIP_PORT)
+      .remove(KEY_SIP_TRANSPORT)
       .apply()
   }
 
@@ -92,5 +130,10 @@ class TokenStore(context: Context) {
     const val KEY_MEMBERSHIP = "selected_membership"
     const val KEY_UNIT = "selected_unit"
     const val KEY_TENANT = "selected_tenant"
+    const val KEY_SIP_EXT = "sip_extension"
+    const val KEY_SIP_PW = "sip_password"
+    const val KEY_SIP_DOMAIN = "sip_domain"
+    const val KEY_SIP_PORT = "sip_port"
+    const val KEY_SIP_TRANSPORT = "sip_transport"
   }
 }
