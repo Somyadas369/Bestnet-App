@@ -262,7 +262,13 @@ fun IntercomScreen(
             name = contact.name,
             role = "Extension ${contact.extension}",
             icon = Icons.Default.Apartment,
-            onCallClick = { onCallContact(contact) }
+            onCallClick = {
+              if (registration == SipRegistration.REGISTERED || sipConfigured) {
+                onCallContact(contact)
+              } else {
+                showEnableDialog = true
+              }
+            }
           )
         }
       }
@@ -288,7 +294,13 @@ fun IntercomScreen(
               "mgmt" -> Icons.Default.Business
               else -> Icons.Default.Apartment
             },
-            onCallClick = { onCallContact(staff) }
+            onCallClick = {
+              if (registration == SipRegistration.REGISTERED || sipConfigured) {
+                onCallContact(staff)
+              } else {
+                showEnableDialog = true
+              }
+            }
           )
         }
       }

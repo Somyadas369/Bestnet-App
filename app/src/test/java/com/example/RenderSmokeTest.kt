@@ -26,4 +26,13 @@ class RenderSmokeTest {
     compose.setContent { BestNetApp() }
     compose.waitForIdle()
   }
+
+  @Test
+  fun `MainActivity launches successfully`() {
+    androidx.test.core.app.ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+      scenario.onActivity { activity ->
+        org.junit.Assert.assertNotNull(activity)
+      }
+    }
+  }
 }

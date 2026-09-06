@@ -23,18 +23,13 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
     ndk {
-      // linphone-sdk ships native libraries for four ABIs, taking the debug APK
-      // from 26 MB to 176 MB. An app that will not start is worse than a large
-      // download, so correctness wins here.
-      //
-      // All three are kept:
-      //  - x86_64      the emulator
-      //  - arm64-v8a   modern physical phones
-      //  - armeabi-v7a 32-bit phones, still common in this market
-      //
-      // The cost is download size. For release, ship an App Bundle instead and
-      // Play delivers only the ABI each device needs, at no size cost.
-      abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+      // linphone-sdk ships native libraries for four ABIs. All four are included
+      // so the app runs reliably on any device or emulator architecture:
+      //  - x86_64      64-bit emulator
+      //  - x86         32-bit emulator
+      //  - arm64-v8a   modern 64-bit phones
+      //  - armeabi-v7a 32-bit phones
+      abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
     }
   }
 

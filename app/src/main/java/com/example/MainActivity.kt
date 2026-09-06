@@ -4,23 +4,53 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.data.sip.SipCallState
+import com.example.ui.components.InCallBottomSheet
 import com.example.ui.components.PreApproveVisitorDialog
 import com.example.ui.navigation.NavRoutes
 import com.example.ui.screens.CommunityNoticesScreen
@@ -33,6 +63,10 @@ import com.example.ui.screens.RaiseComplaintScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.VisitorsScreen
 import com.example.ui.theme.BestNetBackground
+import com.example.ui.theme.BestNetGreen
+import com.example.ui.theme.BestNetInk
+import com.example.ui.theme.BestNetMuted
+import com.example.ui.theme.BestNetRed
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.BestNetViewModel
 
@@ -68,13 +102,80 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+
+    Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+      Log.e("MainActivity", "Uncaught exception on thread ${thread.name}", throwable)
+    }
+
     setContent {
       MyApplicationTheme {
-        Surface(
-          modifier = Modifier.fillMaxSize(),
-          color = BestNetBackground
-        ) {
-          BestNetApp()
+        var initError by remember { mutableStateOf<Throwable?>(null) }
+        val vm: BestNetViewModel? = remember {
+          try {
+            ViewModelProvider(this)[BestNetViewModel::class.java]
+          } catch (t: Throwable) {
+            Log.e("MainActivity", "Failed to create BestNetViewModel", t)
+            initError = t
+            null
+          }
+        }
+
+        if (initError != null || vm == null) {
+          Box(
+            modifier = Modifier
+              .fillMaxSize()
+              .background(BestNetBackground)
+              .statusBarsPadding()
+              .padding(24.dp),
+            contentAlignment = Alignment.Center
+          ) {
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              shape = RoundedCornerShape(16.dp),
+              colors = CardDefaults.cardColors(containerColor = Color.White),
+              elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+              Column(
+                modifier = Modifier
+                  .padding(20.dp)
+                  .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+              ) {
+                Text(
+                  text = "Unable to Start App",
+                  fontSize = 18.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = BestNetRed
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                  text = initError?.localizedMessage ?: "Initialization error",
+                  fontSize = 13.sp,
+                  color = BestNetInk
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                  text = initError?.stackTraceToString()?.take(500) ?: "",
+                  fontSize = 10.5.sp,
+                  color = BestNetMuted
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                  onClick = { recreate() },
+                  colors = ButtonDefaults.buttonColors(containerColor = BestNetGreen)
+                ) {
+                  Text("Retry", color = Color.White)
+                }
+              }
+            }
+          }
+        } else {
+          Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = BestNetBackground
+          ) {
+            BestNetApp(viewModel = vm)
+          }
         }
       }
     }
@@ -91,11 +192,21 @@ fun BestNetApp(
   val allVisitors by viewModel.allVisitors.collectAsStateWithLifecycle()
   val allNotices by viewModel.allNotices.collectAsStateWithLifecycle()
   val allCommunityNotices by viewModel.allCommunityNotices.collectAsStateWithLifecycle()
+  val snackbarHostState = remember { SnackbarHostState() }
+  val snackbarMsg by viewModel.snackbarMessage.collectAsStateWithLifecycle()
 
-  NavHost(
-    navController = navController,
-    startDestination = NavRoutes.SPLASH
-  ) {
+  LaunchedEffect(snackbarMsg) {
+    snackbarMsg?.let {
+      snackbarHostState.showSnackbar(it)
+      viewModel.clearSnackbar()
+    }
+  }
+
+  Box(modifier = Modifier.fillMaxSize()) {
+    NavHost(
+      navController = navController,
+      startDestination = NavRoutes.SPLASH
+    ) {
     // 1. Splash Screen
     composable(NavRoutes.SPLASH) {
       val loggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
@@ -169,7 +280,10 @@ fun BestNetApp(
         staffList = viewModel.intercomStaff,
         neighborsList = viewModel.intercomNeighbors,
         onBackClick = { navController.popBackStack() },
-        onCallContact = { contact -> viewModel.startCall(contact) },
+        onCallContact = { contact ->
+          (context as? MainActivity)?.requestCallPermissions()
+          viewModel.startCall(contact)
+        },
         myExtension = myExtension,
         directory = directory,
         registration = sipRegistration,
@@ -259,5 +373,70 @@ fun BestNetApp(
       errorMessage = visitorError,
     )
   }
+
+  // Active in-app SIP call overlay (outgoing or incoming).
+  // Hoisted at the app root level so it is active and displayed on EVERY screen:
+  // Home, Intercom directory, Complaints, Visitors, Notices, etc.
+  val sipCall by viewModel.sipCall.collectAsStateWithLifecycle()
+  val sipMuted by viewModel.sipMuted.collectAsStateWithLifecycle()
+  val sipSpeaker by viewModel.sipSpeaker.collectAsStateWithLifecycle()
+  val activeCall by viewModel.activeCallContact.collectAsStateWithLifecycle()
+  val directory by viewModel.intercomDirectory.collectAsStateWithLifecycle()
+
+  val callVisible = sipCall.state == SipCallState.INCOMING ||
+    sipCall.state == SipCallState.OUTGOING ||
+    sipCall.state == SipCallState.CONNECTED
+
+  // Clear a finished call so the sheet closes instead of sticking on "Ended".
+  LaunchedEffect(sipCall.state) {
+    if (sipCall.state == SipCallState.ENDED || sipCall.state == SipCallState.ERROR) {
+      viewModel.acknowledgeCallEnded()
+    }
+  }
+
+  if (callVisible) {
+    val remote = sipCall.remote ?: activeCall?.extension ?: "Unknown"
+    // Match the contact if possible (from activeCall, directory, staff or neighbors)
+    val matchedContact = activeCall
+      ?: directory?.firstOrNull { it.extension == remote }
+      ?: (viewModel.intercomStaff + viewModel.intercomNeighbors).firstOrNull { it.extension == remote }
+
+    val displayName = if (sipCall.state == SipCallState.INCOMING) {
+      matchedContact?.name ?: "Intercom Call ($remote)"
+    } else {
+      matchedContact?.name ?: activeCall?.name ?: "Extension $remote"
+    }
+
+    val displayRole = matchedContact?.role ?: "Extension $remote"
+
+    InCallBottomSheet(
+      contactName = displayName,
+      contactRole = displayRole,
+      statusText = when (sipCall.state) {
+        SipCallState.INCOMING -> "Incoming call"
+        SipCallState.OUTGOING -> "Calling…"
+        else -> "Connected"
+      },
+      countUp = sipCall.state == SipCallState.CONNECTED,
+      isMuted = sipMuted,
+      isSpeaker = sipSpeaker,
+      onToggleMute = { viewModel.setMuted(it) },
+      onToggleSpeaker = { viewModel.setSpeaker(it) },
+      showAnswer = sipCall.state == SipCallState.INCOMING,
+      onAnswer = {
+        (context as? MainActivity)?.requestCallPermissions()
+        viewModel.answerCall()
+      },
+      onEndCall = { viewModel.endCall() }
+    )
+  }
+
+  SnackbarHost(
+    hostState = snackbarHostState,
+    modifier = Modifier
+      .align(Alignment.BottomCenter)
+      .padding(bottom = 16.dp)
+  )
+}
 }
 

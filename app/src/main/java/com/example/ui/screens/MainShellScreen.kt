@@ -36,9 +36,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.sip.SipCallState
-import com.example.ui.components.InCallBottomSheet
-import com.example.ui.components.PreApproveVisitorDialog
 import com.example.ui.components.SpeedTestDialog
 import com.example.ui.components.SwitchHomeBottomSheet
 import com.example.ui.theme.BestNetBorder
@@ -64,7 +61,6 @@ fun MainShellScreen(
   val allComplaints by viewModel.allComplaints.collectAsStateWithLifecycle()
   val allCommunityNotices by viewModel.allCommunityNotices.collectAsStateWithLifecycle()
   val snackbarMsg by viewModel.snackbarMessage.collectAsStateWithLifecycle()
-  val activeCall by viewModel.activeCallContact.collectAsStateWithLifecycle()
   val showSpeedTest by viewModel.showSpeedTest.collectAsStateWithLifecycle()
   val showSwitchHome by viewModel.showSwitchHomeSheet.collectAsStateWithLifecycle()
   val subscriptions by viewModel.subscriptions.collectAsStateWithLifecycle()
@@ -263,45 +259,6 @@ fun MainShellScreen(
       currentResidentId = currentResident?.id ?: 1L,
       onSelectResident = { viewModel.switchResident(it) },
       onDismiss = { viewModel.closeSwitchHomeSheet() }
-    )
-  }
-
-  // Driven by the SIP stack, not by a tap. An incoming call opens this sheet
-  // wherever the resident happens to be in the app, and an outgoing one stays
-  // open only as long as the call actually exists.
-  val sipCall by viewModel.sipCall.collectAsStateWithLifecycle()
-  val sipMuted by viewModel.sipMuted.collectAsStateWithLifecycle()
-  val sipSpeaker by viewModel.sipSpeaker.collectAsStateWithLifecycle()
-
-  val callVisible = sipCall.state == SipCallState.INCOMING ||
-    sipCall.state == SipCallState.OUTGOING ||
-    sipCall.state == SipCallState.CONNECTED
-
-  // Clear a finished call so the sheet closes instead of sticking on "Ended".
-  LaunchedEffect(sipCall.state) {
-    if (sipCall.state == SipCallState.ENDED || sipCall.state == SipCallState.ERROR) {
-      viewModel.acknowledgeCallEnded()
-    }
-  }
-
-  if (callVisible) {
-    val remote = sipCall.remote ?: activeCall?.extension ?: "Unknown"
-    InCallBottomSheet(
-      contactName = activeCall?.name?.takeIf { sipCall.state != SipCallState.INCOMING } ?: "Extension $remote",
-      contactRole = "Extension $remote",
-      statusText = when (sipCall.state) {
-        SipCallState.INCOMING -> "Incoming call"
-        SipCallState.OUTGOING -> "Calling…"
-        else -> "Connected"
-      },
-      countUp = sipCall.state == SipCallState.CONNECTED,
-      isMuted = sipMuted,
-      isSpeaker = sipSpeaker,
-      onToggleMute = { viewModel.setMuted(it) },
-      onToggleSpeaker = { viewModel.setSpeaker(it) },
-      showAnswer = sipCall.state == SipCallState.INCOMING,
-      onAnswer = { viewModel.answerCall() },
-      onEndCall = { viewModel.endCall() }
     )
   }
 }

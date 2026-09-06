@@ -18,31 +18,90 @@ import androidx.security.crypto.MasterKey
  * and losing encryption is strictly better than an app that cannot log in at
  * all — but it is logged as an error rather than passed over silently.
  */
-class TokenStore(context: Context) {
+class TokenStore(private val context: Context) {
 
-  private val prefs: SharedPreferences = try {
-    val masterKey = MasterKey.Builder(context)
-      .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-      .build()
-    EncryptedSharedPreferences.create(
-      context,
-      "bestnet_session",
-      masterKey,
-      EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-      EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
-  } catch (err: Throwable) {
-    Log.e("TokenStore", "Encrypted storage unavailable, falling back to plaintext prefs", err)
-    context.getSharedPreferences("bestnet_session_plain", Context.MODE_PRIVATE)
+  private var prefs: SharedPreferences = createPrefs(context)
+
+  private fun createPrefs(ctx: Context): SharedPreferences {
+    return try {
+      val masterKey = MasterKey.Builder(ctx)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+      val esp = EncryptedSharedPreferences.create(
+        ctx,
+        "bestnet_session",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+      )
+      // Probe read to detect corrupted or unreadable keys immediately.
+      esp.getString("__probe__", null)
+      esp
+    } catch (err: Throwable) {
+      Log.e("TokenStore", "Encrypted storage unavailable or corrupted, resetting to plain prefs", err)
+      purgeEncryptedPrefs(ctx)
+      ctx.getSharedPreferences("bestnet_session_plain", Context.MODE_PRIVATE)
+    }
+  }
+
+  private fun purgeEncryptedPrefs(ctx: Context) {
+    try {
+      ctx.deleteSharedPreferences("bestnet_session")
+    } catch (_: Throwable) {}
+  }
+
+  private fun recoverPrefs() {
+    purgeEncryptedPrefs(context)
+    prefs = context.getSharedPreferences("bestnet_session_plain", Context.MODE_PRIVATE)
+  }
+
+  private fun safeGetString(key: String): String? {
+    return try {
+      prefs.getString(key, null)
+    } catch (err: Throwable) {
+      Log.e("TokenStore", "Failed reading $key from prefs, recovering", err)
+      recoverPrefs()
+      null
+    }
+  }
+
+  private fun safeSetString(key: String, value: String?) {
+    try {
+      prefs.edit().putString(key, value).apply()
+    } catch (err: Throwable) {
+      Log.e("TokenStore", "Failed writing $key to prefs, recovering", err)
+      recoverPrefs()
+      try { prefs.edit().putString(key, value).apply() } catch (_: Throwable) {}
+    }
+  }
+
+  private fun safeGetInt(key: String, default: Int): Int {
+    return try {
+      prefs.getInt(key, default)
+    } catch (err: Throwable) {
+      Log.e("TokenStore", "Failed reading $key from prefs, recovering", err)
+      recoverPrefs()
+      default
+    }
+  }
+
+  private fun safeSetInt(key: String, value: Int) {
+    try {
+      prefs.edit().putInt(key, value).apply()
+    } catch (err: Throwable) {
+      Log.e("TokenStore", "Failed writing $key to prefs, recovering", err)
+      recoverPrefs()
+      try { prefs.edit().putInt(key, value).apply() } catch (_: Throwable) {}
+    }
   }
 
   var accessToken: String?
-    get() = prefs.getString(KEY_ACCESS, null)
-    set(value) = prefs.edit().putString(KEY_ACCESS, value).apply()
+    get() = safeGetString(KEY_ACCESS)
+    set(value) = safeSetString(KEY_ACCESS, value)
 
   var refreshToken: String?
-    get() = prefs.getString(KEY_REFRESH, null)
-    set(value) = prefs.edit().putString(KEY_REFRESH, value).apply()
+    get() = safeGetString(KEY_REFRESH)
+    set(value) = safeSetString(KEY_REFRESH, value)
 
   /**
    * Which home the resident is currently viewing. Purely a UI preference — it
@@ -50,8 +109,8 @@ class TokenStore(context: Context) {
    * are unit-scoped.
    */
   var selectedMembershipId: String?
-    get() = prefs.getString(KEY_MEMBERSHIP, null)
-    set(value) = prefs.edit().putString(KEY_MEMBERSHIP, value).apply()
+    get() = safeGetString(KEY_MEMBERSHIP)
+    set(value) = safeSetString(KEY_MEMBERSHIP, value)
 
   /**
    * Server ids for the selected home. Room's `Resident` is a display model with
@@ -60,12 +119,12 @@ class TokenStore(context: Context) {
    * from). Kept here rather than widening the entity and forcing a migration.
    */
   var selectedUnitId: String?
-    get() = prefs.getString(KEY_UNIT, null)
-    set(value) = prefs.edit().putString(KEY_UNIT, value).apply()
+    get() = safeGetString(KEY_UNIT)
+    set(value) = safeSetString(KEY_UNIT, value)
 
   var selectedTenantId: String?
-    get() = prefs.getString(KEY_TENANT, null)
-    set(value) = prefs.edit().putString(KEY_TENANT, value).apply()
+    get() = safeGetString(KEY_TENANT)
+    set(value) = safeSetString(KEY_TENANT, value)
 
   /**
    * SIP credentials for in-app calling.
@@ -78,24 +137,24 @@ class TokenStore(context: Context) {
    * Encrypted at rest with the tokens, for the same reason.
    */
   var sipExtension: String?
-    get() = prefs.getString(KEY_SIP_EXT, null)
-    set(value) = prefs.edit().putString(KEY_SIP_EXT, value).apply()
+    get() = safeGetString(KEY_SIP_EXT)
+    set(value) = safeSetString(KEY_SIP_EXT, value)
 
   var sipPassword: String?
-    get() = prefs.getString(KEY_SIP_PW, null)
-    set(value) = prefs.edit().putString(KEY_SIP_PW, value).apply()
+    get() = safeGetString(KEY_SIP_PW)
+    set(value) = safeSetString(KEY_SIP_PW, value)
 
   var sipDomain: String?
-    get() = prefs.getString(KEY_SIP_DOMAIN, null)
-    set(value) = prefs.edit().putString(KEY_SIP_DOMAIN, value).apply()
+    get() = safeGetString(KEY_SIP_DOMAIN)
+    set(value) = safeSetString(KEY_SIP_DOMAIN, value)
 
   var sipPort: Int
-    get() = prefs.getInt(KEY_SIP_PORT, 5061)
-    set(value) = prefs.edit().putInt(KEY_SIP_PORT, value).apply()
+    get() = safeGetInt(KEY_SIP_PORT, 5061)
+    set(value) = safeSetInt(KEY_SIP_PORT, value)
 
   var sipTransport: String?
-    get() = prefs.getString(KEY_SIP_TRANSPORT, null)
-    set(value) = prefs.edit().putString(KEY_SIP_TRANSPORT, value).apply()
+    get() = safeGetString(KEY_SIP_TRANSPORT)
+    set(value) = safeSetString(KEY_SIP_TRANSPORT, value)
 
   val hasSipCredentials: Boolean
     get() = !sipExtension.isNullOrBlank() && !sipPassword.isNullOrBlank()
@@ -103,25 +162,27 @@ class TokenStore(context: Context) {
   val isLoggedIn: Boolean get() = !accessToken.isNullOrBlank()
 
   fun save(tokens: TokensDto) {
-    prefs.edit()
-      .putString(KEY_ACCESS, tokens.accessToken)
-      .putString(KEY_REFRESH, tokens.refreshToken)
-      .apply()
+    safeSetString(KEY_ACCESS, tokens.accessToken)
+    safeSetString(KEY_REFRESH, tokens.refreshToken)
   }
 
   fun clear() {
-    prefs.edit()
-      .remove(KEY_ACCESS)
-      .remove(KEY_REFRESH)
-      .remove(KEY_MEMBERSHIP)
-      .remove(KEY_UNIT)
-      .remove(KEY_TENANT)
-      .remove(KEY_SIP_EXT)
-      .remove(KEY_SIP_PW)
-      .remove(KEY_SIP_DOMAIN)
-      .remove(KEY_SIP_PORT)
-      .remove(KEY_SIP_TRANSPORT)
-      .apply()
+    try {
+      prefs.edit()
+        .remove(KEY_ACCESS)
+        .remove(KEY_REFRESH)
+        .remove(KEY_MEMBERSHIP)
+        .remove(KEY_UNIT)
+        .remove(KEY_TENANT)
+        .remove(KEY_SIP_EXT)
+        .remove(KEY_SIP_PW)
+        .remove(KEY_SIP_DOMAIN)
+        .remove(KEY_SIP_PORT)
+        .remove(KEY_SIP_TRANSPORT)
+        .apply()
+    } catch (err: Throwable) {
+      recoverPrefs()
+    }
   }
 
   private companion object {

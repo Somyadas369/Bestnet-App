@@ -232,36 +232,76 @@ class SipManager(private val context: Context) {
 
   /** Dials another extension on the same PBX. */
   fun callExtension(extension: String) {
-    val c = core ?: return
-    val domain = account?.params?.identityAddress?.domain ?: return
-    val target = Factory.instance().createAddress("sip:$extension@$domain") ?: return
-    val params = c.createCallParams(null) ?: return
-    c.inviteAddressWithParams(target, params)
+    try {
+      start()
+      val c = core ?: run {
+        Log.e(TAG, "SIP Core is not ready")
+        _call.value = SipCallInfo(SipCallState.ERROR, extension, "SIP stack not ready")
+        return
+      }
+      val effectiveAccount = account ?: c.defaultAccount
+      val domain = effectiveAccount?.params?.identityAddress?.domain ?: run {
+        Log.e(TAG, "No SIP domain configured")
+        _call.value = SipCallInfo(SipCallState.ERROR, extension, "Not registered to PBX")
+        return
+      }
+      val target = Factory.instance().createAddress("sip:$extension@$domain") ?: run {
+        Log.e(TAG, "Invalid target address sip:$extension@$domain")
+        _call.value = SipCallInfo(SipCallState.ERROR, extension, "Invalid extension")
+        return
+      }
+      val params = c.createCallParams(null) ?: run {
+        Log.e(TAG, "Could not create call params")
+        _call.value = SipCallInfo(SipCallState.ERROR, extension, "Call params error")
+        return
+      }
+      _call.value = SipCallInfo(SipCallState.OUTGOING, extension)
+      c.inviteAddressWithParams(target, params)
+    } catch (t: Throwable) {
+      Log.e(TAG, "Error initiating call to $extension", t)
+      _call.value = SipCallInfo(SipCallState.ERROR, extension, t.localizedMessage ?: "Call failed")
+    }
   }
 
   fun answer() {
-    core?.currentCall?.accept()
+    try {
+      core?.currentCall?.accept()
+    } catch (t: Throwable) {
+      Log.e(TAG, "Error answering call", t)
+    }
   }
 
   fun hangUp() {
-    val c = core ?: return
-    // currentCall is null for a call that is still only ringing, so fall back
-    // to terminating everything rather than leaving a call the user thinks
-    // they rejected still alive.
-    c.currentCall?.terminate() ?: c.terminateAllCalls()
+    try {
+      val c = core ?: return
+      // currentCall is null for a call that is still only ringing, so fall back
+      // to terminating everything rather than leaving a call the user thinks
+      // they rejected still alive.
+      c.currentCall?.terminate() ?: c.terminateAllCalls()
+    } catch (t: Throwable) {
+      Log.e(TAG, "Error hanging up call", t)
+    }
   }
 
   fun setMuted(value: Boolean) {
-    core?.isMicEnabled = !value
-    _muted.value = value
+    try {
+      core?.isMicEnabled = !value
+      _muted.value = value
+    } catch (t: Throwable) {
+      Log.e(TAG, "Error setting mic muted", t)
+    }
   }
 
   fun setSpeaker(value: Boolean) {
-    val c = core ?: return
-    val target = if (value) AudioDevice.Type.Speaker else AudioDevice.Type.Earpiece
-    c.audioDevices.firstOrNull { it.type == target && it.hasCapability(AudioDevice.Capabilities.CapabilityPlay) }
-      ?.let { c.outputAudioDevice = it }
-    _speaker.value = value
+    try {
+      val c = core ?: return
+      val target = if (value) AudioDevice.Type.Speaker else AudioDevice.Type.Earpiece
+      c.audioDevices.firstOrNull { it.type == target && it.hasCapability(AudioDevice.Capabilities.CapabilityPlay) }
+        ?.let { c.outputAudioDevice = it }
+      _speaker.value = value
+    } catch (t: Throwable) {
+      Log.e(TAG, "Error toggling speaker", t)
+    }
   }
 
   /** Clears the ENDED/ERROR state once the UI has shown it. */

@@ -17,8 +17,10 @@ import com.example.data.remote.SubscriptionDto
 import com.example.BestNetApp
 import com.example.data.repository.SessionRepository
 import com.example.data.sip.SipCallInfo
+import android.util.Log
 import com.example.data.sip.SipManager
 import com.example.data.sip.SipRegistration
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -135,8 +137,11 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
     if (_isLoggedIn.value) {
       refreshFromServer()
       // A device that was already set up should be reachable straight away,
-      // without the resident opening the Intercom screen first.
-      registerSipIfPossible()
+      // without the resident opening the Intercom screen first. Offloaded
+      // to IO dispatcher so it never blocks startup rendering.
+      viewModelScope.launch(Dispatchers.IO) {
+        registerSipIfPossible()
+      }
     }
 
     // No placeholder identity: an invented "Rahul Sharma" would be shown as
@@ -446,9 +451,13 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
    */
   fun startCall(contact: IntercomContact) {
     if (sipManager.registration.value != SipRegistration.REGISTERED) {
-      _snackbarMessage.value =
-        "Calling isn't set up on this device — turn it on from Intercom, or dial ${contact.extension} from a SIP app"
-      return
+      if (sipConfigured) {
+        registerSipIfPossible()
+      } else {
+        _snackbarMessage.value =
+          "Calling isn't set up on this device — please tap 'Turn on calling here' above"
+        return
+      }
     }
     _activeCallContact.value = contact
     sipManager.callExtension(contact.extension)
@@ -481,14 +490,18 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
 
   /** Registers with the PBX when credentials are already stored on this device. */
   fun registerSipIfPossible() {
-    val creds = sessionRepository.storedSipCredentials() ?: return
-    sipManager.register(
-      extension = creds.extension,
-      password = creds.password,
-      domain = creds.domain,
-      port = creds.port,
-      useTls = creds.transport.equals("TLS", ignoreCase = true),
-    )
+    try {
+      val creds = sessionRepository.storedSipCredentials() ?: return
+      sipManager.register(
+        extension = creds.extension,
+        password = creds.password,
+        domain = creds.domain,
+        port = creds.port,
+        useTls = creds.transport.equals("TLS", ignoreCase = true),
+      )
+    } catch (t: Throwable) {
+      Log.e("BestNetViewModel", "Failed to register SIP stack", t)
+    }
   }
 
   fun answerCall() = sipManager.answer()
@@ -497,7 +510,10 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
 
   fun setSpeaker(value: Boolean) = sipManager.setSpeaker(value)
 
-  fun acknowledgeCallEnded() = sipManager.acknowledgeCallEnded()
+  fun acknowledgeCallEnded() {
+    sipManager.acknowledgeCallEnded()
+    _activeCallContact.value = null
+  }
 
   fun endCall() {
     sipManager.hangUp()
