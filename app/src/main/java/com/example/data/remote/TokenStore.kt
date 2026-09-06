@@ -31,7 +31,7 @@ class TokenStore(context: Context) {
       EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
       EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
-  } catch (err: Exception) {
+  } catch (err: Throwable) {
     Log.e("TokenStore", "Encrypted storage unavailable, falling back to plaintext prefs", err)
     context.getSharedPreferences("bestnet_session_plain", Context.MODE_PRIVATE)
   }

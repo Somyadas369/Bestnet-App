@@ -28,13 +28,9 @@ android {
       // every phone shipped since roughly 2017 is arm64.
       //
       // Two caveats:
-      //  - Add "x86_64" back to run on an emulator. Without it the app installs
-      //    and then dies on the first SIP call with an UnsatisfiedLinkError,
-      //    which does not look like a missing ABI.
-      //  - Add "armeabi-v7a" back for older 32-bit phones, or better, ship an
-      //    App Bundle for release and let Play deliver per-device native libs —
-      //    that restores every ABI at no download-size cost.
-      abiFilters += listOf("arm64-v8a")
+      //  - "x86_64" is required to run on the streaming emulator.
+      //  - "arm64-v8a" is required for modern Android physical devices.
+      abiFilters += listOf("arm64-v8a", "x86_64")
     }
   }
 

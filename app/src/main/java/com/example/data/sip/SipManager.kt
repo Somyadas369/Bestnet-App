@@ -109,19 +109,23 @@ class SipManager(private val context: Context) {
   @Synchronized
   fun start() {
     if (core != null) return
-    // 5.5 has no setLogLevel on Factory; this is the toggle that exists.
-    // Off by default so SIP traffic — including auth headers — doesn't land in
-    // logcat on a user's device.
-    Factory.instance().enableLogcatLogs(false)
-    val created = Factory.instance().createCore(null, null, context)
-    created.addListener(listener)
-    // Set explicitly rather than trusting the default: the Core does nothing at
-    // all — no registration, no incoming calls — unless something drives
-    // iterate(). On Android the SDK can do this itself, and this makes sure it
-    // does instead of leaving it to a version-dependent default.
-    created.isAutoIterateEnabled = true
-    created.start()
-    core = created
+    try {
+      // 5.5 has no setLogLevel on Factory; this is the toggle that exists.
+      // Off by default so SIP traffic — including auth headers — doesn't land in
+      // logcat on a user's device.
+      Factory.instance().enableLogcatLogs(false)
+      val created = Factory.instance().createCore(null, null, context)
+      created.addListener(listener)
+      // Set explicitly rather than trusting the default: the Core does nothing at
+      // all — no registration, no incoming calls — unless something drives
+      // iterate(). On Android the SDK can do this itself, and this makes sure it
+      // does instead of leaving it to a version-dependent default.
+      created.isAutoIterateEnabled = true
+      created.start()
+      core = created
+    } catch (t: Throwable) {
+      Log.e(TAG, "Failed to initialize linphone Core safely", t)
+    }
   }
 
   /**
@@ -133,45 +137,53 @@ class SipManager(private val context: Context) {
    */
   @Synchronized
   fun register(extension: String, password: String, domain: String, port: Int, useTls: Boolean = true) {
-    start()
-    val c = core ?: return
-    clearAccounts()
+    try {
+      start()
+      val c = core ?: run {
+        _registration.value = SipRegistration.FAILED
+        return
+      }
+      clearAccounts()
 
-    val identity = Factory.instance().createAddress("sip:$extension@$domain") ?: run {
-      Log.e(TAG, "Could not build SIP identity for $extension@$domain")
+      val identity = Factory.instance().createAddress("sip:$extension@$domain") ?: run {
+        Log.e(TAG, "Could not build SIP identity for $extension@$domain")
+        _registration.value = SipRegistration.FAILED
+        return
+      }
+
+      // The auth realm must match what Asterisk challenges with. Passing null
+      // lets linphone accept whatever realm the server sends, which is correct
+      // here because the PBX's realm is a server-side setting we don't control
+      // from the app and it has changed once already.
+      val auth = Factory.instance().createAuthInfo(extension, null, password, null, null, domain)
+      c.addAuthInfo(auth)
+
+      val params: AccountParams = c.createAccountParams().apply {
+        identityAddress = identity
+        val server = Factory.instance().createAddress("sip:$domain:$port")
+        server?.transport = if (useTls) TransportType.Tls else TransportType.Udp
+        serverAddress = server
+        isRegisterEnabled = true
+        // Re-REGISTER well inside the default expiry. Without a short-ish
+        // refresh the OS drops the idle socket on mobile networks and the phone
+        // silently stops receiving calls.
+        expires = 300
+      }
+
+      val acc = c.createAccount(params)
+      c.addAccount(acc)
+      c.defaultAccount = acc
+      account = acc
+      _registration.value = SipRegistration.PROGRESS
+
+      // Signalling is TLS; media is not encrypted. Requiring SRTP here would fail
+      // calls against the current PBX config, which does not offer it.
+      // TODO: switch to MediaEncryption.SRTP once the PBX enables it.
+      c.mediaEncryption = MediaEncryption.None
+    } catch (t: Throwable) {
+      Log.e(TAG, "Registration exception", t)
       _registration.value = SipRegistration.FAILED
-      return
     }
-
-    // The auth realm must match what Asterisk challenges with. Passing null
-    // lets linphone accept whatever realm the server sends, which is correct
-    // here because the PBX's realm is a server-side setting we don't control
-    // from the app and it has changed once already.
-    val auth = Factory.instance().createAuthInfo(extension, null, password, null, null, domain)
-    c.addAuthInfo(auth)
-
-    val params: AccountParams = c.createAccountParams().apply {
-      identityAddress = identity
-      val server = Factory.instance().createAddress("sip:$domain:$port")
-      server?.transport = if (useTls) TransportType.Tls else TransportType.Udp
-      serverAddress = server
-      isRegisterEnabled = true
-      // Re-REGISTER well inside the default expiry. Without a short-ish
-      // refresh the OS drops the idle socket on mobile networks and the phone
-      // silently stops receiving calls.
-      expires = 300
-    }
-
-    val acc = c.createAccount(params)
-    c.addAccount(acc)
-    c.defaultAccount = acc
-    account = acc
-    _registration.value = SipRegistration.PROGRESS
-
-    // Signalling is TLS; media is not encrypted. Requiring SRTP here would fail
-    // calls against the current PBX config, which does not offer it.
-    // TODO: switch to MediaEncryption.SRTP once the PBX enables it.
-    c.mediaEncryption = MediaEncryption.None
   }
 
   @Synchronized
