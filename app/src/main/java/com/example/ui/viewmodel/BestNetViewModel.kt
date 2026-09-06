@@ -11,16 +11,23 @@ import com.example.data.model.Notice
 import com.example.data.model.Resident
 import com.example.data.model.Visitor
 import com.example.data.repository.BestNetRepository
+import com.example.data.remote.CommunityEventDto
+import com.example.data.remote.EmergencyContactDto
+import com.example.data.remote.SubscriptionDto
+import com.example.data.repository.SessionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 class BestNetViewModel(application: Application) : AndroidViewModel(application) {
 
   private val repository: BestNetRepository
+  private val sessionRepository: SessionRepository
 
   val currentResident: StateFlow<Resident?>
   val allResidents: StateFlow<List<Resident>>
@@ -32,8 +39,42 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
   val intercomStaff: List<IntercomContact>
   val intercomNeighbors: List<IntercomContact>
 
-  private val _isLoggedIn = MutableStateFlow(true)
+  // Set from the stored session in init{}. Starts false so a cold start with no
+  // session lands on Login rather than flashing the signed-in app first.
+  private val _isLoggedIn = MutableStateFlow(false)
   val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+  private val _authBusy = MutableStateFlow(false)
+  val authBusy: StateFlow<Boolean> = _authBusy.asStateFlow()
+
+  /** Server-supplied failure text, shown verbatim rather than a generic message. */
+  private val _authError = MutableStateFlow<String?>(null)
+  val authError: StateFlow<String?> = _authError.asStateFlow()
+
+  private val _complaintSubmitting = MutableStateFlow(false)
+  val complaintSubmitting: StateFlow<Boolean> = _complaintSubmitting.asStateFlow()
+
+  private val _complaintError = MutableStateFlow<String?>(null)
+  val complaintError: StateFlow<String?> = _complaintError.asStateFlow()
+
+  private val _visitorSubmitting = MutableStateFlow(false)
+  val visitorSubmitting: StateFlow<Boolean> = _visitorSubmitting.asStateFlow()
+
+  private val _visitorError = MutableStateFlow<String?>(null)
+  val visitorError: StateFlow<String?> = _visitorError.asStateFlow()
+
+  // Services / Community. Held in memory rather than Room — read-only lists
+  // that are always refetched on sync. Null means "not loaded yet", which the
+  // screens distinguish from an empty list so they can show "Loading…" instead
+  // of wrongly claiming there is nothing.
+  private val _subscriptions = MutableStateFlow<List<SubscriptionDto>?>(null)
+  val subscriptions: StateFlow<List<SubscriptionDto>?> = _subscriptions.asStateFlow()
+
+  private val _events = MutableStateFlow<List<CommunityEventDto>?>(null)
+  val events: StateFlow<List<CommunityEventDto>?> = _events.asStateFlow()
+
+  private val _emergencyContacts = MutableStateFlow<List<EmergencyContactDto>?>(null)
+  val emergencyContacts: StateFlow<List<EmergencyContactDto>?> = _emergencyContacts.asStateFlow()
 
   private val _snackbarMessage = MutableStateFlow<String?>(null)
   val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
@@ -56,11 +97,20 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
   init {
     val database = BestNetDatabase.getDatabase(application)
     repository = BestNetRepository(database.bestNetDao())
+    sessionRepository = SessionRepository(application, database.bestNetDao())
 
+    // Start from the stored session rather than assuming logged-in, so a
+    // returning user skips login and a new one cannot walk straight into the
+    // app without authenticating.
+    _isLoggedIn.value = sessionRepository.isLoggedIn
+    if (_isLoggedIn.value) refreshFromServer()
+
+    // No placeholder identity: an invented "Rahul Sharma" would be shown as
+    // though it were the signed-in user during the first frames after login.
     currentResident = repository.currentResident.stateIn(
       viewModelScope,
       SharingStarted.WhileSubscribed(5000),
-      Resident(name = "Rahul Sharma", phone = "+91 98765 43210", unit = "A-1201", communityName = "Sunrise Apartments", isCurrent = true)
+      null
     )
 
     allResidents = repository.allResidents.stateIn(
@@ -101,13 +151,94 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
     _activeTab.value = tab
   }
 
-  fun login() {
-    _isLoggedIn.value = true
+  /** Step 1 of login: ask the server to send a code over WhatsApp. */
+  fun requestOtp(phone: String, onResult: (Boolean) -> Unit) {
+    _authBusy.value = true
+    _authError.value = null
+    viewModelScope.launch {
+      val result = sessionRepository.requestOtp(phone)
+      _authBusy.value = false
+      result
+        .onSuccess { onResult(true) }
+        .onFailure {
+          _authError.value = it.message ?: "Could not send the code"
+          onResult(false)
+        }
+    }
+  }
+
+  /**
+   * Step 2: verify the code, then pull the resident's real data down before
+   * letting them in. Sync happens before `isLoggedIn` flips so the app never
+   * renders a signed-in shell with no home in it.
+   */
+  fun verifyOtp(phone: String, code: String, onResult: (Boolean) -> Unit) {
+    _authBusy.value = true
+    _authError.value = null
+    viewModelScope.launch {
+      val verified = sessionRepository.verifyOtp(phone, code)
+      if (verified.isFailure) {
+        _authBusy.value = false
+        _authError.value = verified.exceptionOrNull()?.message ?: "Invalid or expired code"
+        onResult(false)
+        return@launch
+      }
+
+      sessionRepository.syncFromServer()
+        .onFailure {
+          // Session is valid but unusable — don't strand the user inside a
+          // half-loaded app pretending to work.
+          _authBusy.value = false
+          _authError.value = it.message ?: "Signed in, but your details could not be loaded"
+          sessionRepository.logout()
+          onResult(false)
+          return@launch
+        }
+
+      _authBusy.value = false
+      _isLoggedIn.value = true
+      loadServicesAndCommunity()
+      onResult(true)
+    }
+  }
+
+  /** Re-pulls server data for an already-authenticated session. */
+  fun refreshFromServer() {
+    viewModelScope.launch {
+      sessionRepository.syncFromServer().onFailure {
+        _snackbarMessage.value = "Couldn't refresh — showing saved data"
+      }
+      loadServicesAndCommunity()
+    }
+  }
+
+  /**
+   * Loads the Services and Community lists. Kept separate from the main sync so
+   * a failure here can't block sign-in — none of it is needed to render Home.
+   */
+  fun loadServicesAndCommunity() {
+    viewModelScope.launch {
+      _subscriptions.value = sessionRepository.mySubscriptions()
+      _events.value = sessionRepository.myEvents()
+      _emergencyContacts.value = sessionRepository.myEmergencyContacts()
+    }
   }
 
   fun logout() {
-    _isLoggedIn.value = false
-    _activeTab.value = "home"
+    viewModelScope.launch {
+      sessionRepository.logout()
+      // In-memory lists are not in Room, so clearing the database doesn't touch
+      // them — without this the next account would briefly see the previous
+      // resident's plan, events and contacts.
+      _subscriptions.value = null
+      _events.value = null
+      _emergencyContacts.value = null
+      _complaintError.value = null
+      _visitorError.value = null
+      _authError.value = null
+      _isLoggedIn.value = false
+      _activeTab.value = "home"
+    }
   }
 
   fun switchResident(id: Long) {
@@ -138,14 +269,36 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
     }
   }
 
-  fun submitComplaint(category: String, description: String, onComplete: (String) -> Unit) {
-    submitComplaint(
-      title = "$category issue in flat",
-      category = category,
-      description = description,
-      priority = "Medium",
-      onComplete = onComplete
-    )
+  /**
+   * Raises a real ticket on the server.
+   *
+   * `onComplete` is called with the server's ticket id only on success. It used
+   * to be called with a locally-invented ticket number that was never sent
+   * anywhere, so the resident was told their complaint was "registered" when
+   * nothing had left the phone.
+   */
+  fun submitComplaintToServer(
+    category: String,
+    description: String,
+    onResult: (success: Boolean, reference: String?) -> Unit,
+  ) {
+    _complaintSubmitting.value = true
+    _complaintError.value = null
+    viewModelScope.launch {
+      sessionRepository.submitComplaint(category, description)
+        .onSuccess { ticket ->
+          _complaintSubmitting.value = false
+          // Short, human-quotable reference from the server's UUID.
+          val reference = ticket.id.take(8).uppercase()
+          _snackbarMessage.value = "Complaint registered — reference $reference"
+          onResult(true, reference)
+        }
+        .onFailure { err ->
+          _complaintSubmitting.value = false
+          _complaintError.value = err.message ?: "Could not register the complaint"
+          onResult(false, null)
+        }
+    }
   }
 
   fun updateComplaintStatus(id: Long, newStatus: String) {
@@ -162,12 +315,38 @@ class BestNetViewModel(application: Application) : AndroidViewModel(application)
     }
   }
 
-  fun preApproveVisitor(name: String, type: String) {
+  /**
+   * Pre-approves a visitor on the server.
+   *
+   * The old version stored the visitor in Room and announced a locally-invented
+   * "pass code" that no guard could ever check. There is no pass code in the
+   * product, so none is claimed here.
+   */
+  fun preApproveVisitorOnServer(
+    name: String,
+    type: String,
+    hoursFromNow: Long,
+    onResult: (Boolean) -> Unit,
+  ) {
+    _visitorSubmitting.value = true
+    _visitorError.value = null
     viewModelScope.launch {
-      val currentUnit = currentResident.value?.unit ?: "A-1201"
-      val pass = repository.addPreApprovedVisitor(name, type, currentUnit)
-      _showPreApproveDialog.value = false
-      _snackbarMessage.value = "Pass code generated: $pass"
+      sessionRepository.preApproveVisitor(
+        name = name,
+        type = type,
+        scheduledAt = Instant.now().plus(hoursFromNow, ChronoUnit.HOURS),
+      )
+        .onSuccess {
+          _visitorSubmitting.value = false
+          _showPreApproveDialog.value = false
+          _snackbarMessage.value = "${it.visitorName} is expected — the gate has been notified"
+          onResult(true)
+        }
+        .onFailure { err ->
+          _visitorSubmitting.value = false
+          _visitorError.value = err.message ?: "Could not pre-approve this visitor"
+          onResult(false)
+        }
     }
   }
 

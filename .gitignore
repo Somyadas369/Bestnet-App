@@ -16,3 +16,6 @@
 local.properties
 .env
 debug.keystore
+
+# Locally built APKs — 25 MB each, and rebuildable from source.
+dist/

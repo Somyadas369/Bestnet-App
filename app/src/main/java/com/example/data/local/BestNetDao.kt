@@ -28,6 +28,31 @@ interface BestNetDao {
   @Query("UPDATE residents SET isCurrent = CASE WHEN id = :residentId THEN 1 ELSE 0 END")
   suspend fun switchCurrentResident(residentId: Long)
 
+  /**
+   * Server sync replaces these tables wholesale rather than upserting, because
+   * Room ids are autoGenerate Longs and the server's are UUID strings — there
+   * is no stable key to match rows on. Replacing also means a home the resident
+   * no longer belongs to actually disappears.
+   */
+  @Query("DELETE FROM residents")
+  suspend fun clearResidents()
+
+  @Query("DELETE FROM notices")
+  suspend fun clearNotices()
+
+  @Query("DELETE FROM visitors")
+  suspend fun clearVisitors()
+
+  @Query("DELETE FROM complaints")
+  suspend fun clearComplaints()
+
+  /**
+   * One-shot read of the selected home, for code that needs the unit label
+   * outside a Flow collector (visit sync, which runs inside a suspend call).
+   */
+  @Query("SELECT * FROM residents WHERE isCurrent = 1 LIMIT 1")
+  suspend fun currentResidentOnce(): Resident?
+
   // Complaints
   @Query("SELECT * FROM complaints ORDER BY createdAt DESC")
   fun getAllComplaints(): Flow<List<Complaint>>

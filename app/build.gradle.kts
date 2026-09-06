@@ -49,6 +49,12 @@ android {
     debug { signingConfig = signingConfigs.getByName("debugConfig") }
   }
   compileOptions {
+    // minSdk is 24 but the app uses java.time (Instant, ZoneId, DateTimeFormatter)
+    // to parse every server timestamp, and those are API 26+. Without desugaring
+    // the app installs fine on Android 7 and then crashes the first time it
+    // renders a notification, visit, ticket or event. Lint catches this; a build
+    // and a unit-test run on a modern JVM do not.
+    isCoreLibraryDesugaringEnabled = true
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
   }
@@ -98,6 +104,8 @@ dependencies {
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
+  implementation(libs.androidx.security.crypto)
+  coreLibraryDesugaring(libs.desugar.jdk.libs)
   // implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)

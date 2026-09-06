@@ -47,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import java.util.Locale
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -240,7 +241,7 @@ fun SpeedTestDialog(
         ) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-              text = String.format("%.1f", downloadSpeed),
+              text = String.format(Locale.US, "%.1f", downloadSpeed),
               fontSize = 32.sp,
               fontWeight = FontWeight.Black,
               color = BestNetInk
@@ -263,7 +264,7 @@ fun SpeedTestDialog(
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Upload", fontSize = 12.sp, color = BestNetMuted)
             Text(
-              text = if (uploadSpeed > 0) "${String.format("%.1f", uploadSpeed)} Mbps" else "--",
+              text = if (uploadSpeed > 0) "${String.format(Locale.US, "%.1f", uploadSpeed)} Mbps" else "--",
               fontSize = 14.sp,
               fontWeight = FontWeight.Bold,
               color = BestNetInk
@@ -340,7 +341,7 @@ fun InCallBottomSheet(
 
   val minutes = callDuration / 60
   val seconds = callDuration % 60
-  val timeFormatted = String.format("%02d:%02d", minutes, seconds)
+  val timeFormatted = String.format(Locale.US, "%02d:%02d", minutes, seconds)
 
   ModalBottomSheet(
     onDismissRequest = onEndCall,
@@ -472,11 +473,18 @@ fun InCallBottomSheet(
 @Composable
 fun PreApproveVisitorDialog(
   onDismiss: () -> Unit,
-  onPreApprove: (name: String, type: String) -> Unit
+  onPreApprove: (name: String, type: String, hoursFromNow: Long) -> Unit,
+  submitting: Boolean = false,
+  errorMessage: String? = null,
 ) {
   var name by remember { mutableStateOf("") }
   var type by remember { mutableStateOf("Guest") }
+  // The server requires a concrete future timestamp. Coarse choices are offered
+  // rather than a date/time picker: a resident saying "in a few hours" is more
+  // truthful than a picker implying minute precision they don't have.
+  var hours by remember { mutableStateOf(1L) }
   val types = listOf("Guest", "Delivery", "Service", "Cab")
+  val whenOptions = listOf("In 1 hour" to 1L, "In 3 hours" to 3L, "Tomorrow" to 24L)
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -484,14 +492,15 @@ fun PreApproveVisitorDialog(
       Button(
         onClick = {
           if (name.isNotBlank()) {
-            onPreApprove(name.trim(), type)
+            onPreApprove(name.trim(), type, hours)
           }
         },
-        enabled = name.isNotBlank(),
+        enabled = name.trim().length >= 2 && !submitting,
         colors = ButtonDefaults.buttonColors(containerColor = BestNetGreen),
         shape = RoundedCornerShape(12.dp)
       ) {
-        Text("Generate Pass", fontWeight = FontWeight.Bold)
+        // Not "Generate Pass": no pass or passcode is issued by the server.
+        Text(if (submitting) "Sending…" else "Pre-approve", fontWeight = FontWeight.Bold)
       }
     },
     dismissButton = {
@@ -509,8 +518,10 @@ fun PreApproveVisitorDialog(
           .padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
       ) {
+        // There is no gate OTP or passcode in the product. This says what
+        // actually happens: the visit appears on the gate's expected list.
         Text(
-          "Generate an instant gate entry OTP passcode for your guest or delivery agent.",
+          "Tell the gate you're expecting someone. They'll appear on the guard's expected-arrivals list.",
           fontSize = 13.sp,
           color = BestNetMuted
         )
@@ -551,6 +562,36 @@ fun PreApproveVisitorDialog(
               )
             }
           }
+        }
+
+        Text("Expected", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = BestNetInk)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          whenOptions.forEach { (label, h) ->
+            val isSelected = hours == h
+            Box(
+              modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(if (isSelected) BestNetGreen else BestNetSurfaceVariant)
+                .clickable { hours = h }
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+              Text(
+                text = label,
+                color = if (isSelected) Color.White else BestNetInk,
+                fontSize = 12.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+              )
+            }
+          }
+        }
+
+        // A pre-approval that didn't reach the server must say so here, rather
+        // than closing the dialog as though it had worked.
+        if (errorMessage != null) {
+          Text(errorMessage, color = Color(0xFFDC2626), fontSize = 12.sp)
         }
       }
     },

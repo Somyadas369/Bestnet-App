@@ -48,6 +48,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.remote.SubscriptionDto
+import com.example.data.remote.absoluteDate
+import com.example.data.remote.subscriptionStatusLabel
 import com.example.ui.components.PreviewBanner
 import com.example.ui.theme.BestNetBackground
 import com.example.ui.theme.BestNetBorder
@@ -61,8 +64,12 @@ import com.example.ui.theme.BestNetSurface
 @Composable
 fun ServicesScreen(
   onOpenSpeedTest: () -> Unit,
-  onShowComingSoon: (String) -> Unit
+  onShowComingSoon: (String) -> Unit,
+  // null = not loaded yet. Distinguished from an empty list so the card can say
+  // "Loading…" rather than claiming there is no active plan.
+  subscriptions: List<SubscriptionDto>? = null,
 ) {
+  val activeSubscription = subscriptions?.firstOrNull { it.status == "ACTIVE" } ?: subscriptions?.firstOrNull()
   var showWifiSettingsDialog by remember { mutableStateOf(false) }
   var showBillingDialog by remember { mutableStateOf(false) }
 
@@ -144,13 +151,17 @@ fun ServicesScreen(
 
                 Column {
                   Text(
-                    text = "BestNet Broadband",
+                    text = activeSubscription?.plan?.name ?: "BestNet",
                     color = Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                   )
                   Text(
-                    text = "Active · Fiber to Home",
+                    text = when {
+                      subscriptions == null -> "Loading…"
+                      activeSubscription == null -> "No active plan on this home"
+                      else -> subscriptionStatusLabel(activeSubscription.status)
+                    },
                     color = Color.White.copy(alpha = 0.85f),
                     fontSize = 12.sp
                   )
@@ -174,13 +185,20 @@ fun ServicesScreen(
                   fontWeight = FontWeight.Medium
                 )
                 Text(
-                  text = "100 Mbps",
+                  // The plan's own description (e.g. speed) when the tenant set
+                  // one; otherwise the plan name rather than an invented speed.
+                  text = activeSubscription?.plan?.description
+                    ?: activeSubscription?.plan?.name
+                    ?: if (subscriptions == null) "…" else "—",
                   fontSize = 22.sp,
                   fontWeight = FontWeight.Bold,
                   color = BestNetInk
                 )
                 Text(
-                  text = "Valid till 31 Dec 2026",
+                  text = activeSubscription?.currentPeriodEnd
+                    ?.let { "Valid till " + absoluteDate(it) }
+                    ?: activeSubscription?.plan?.monthlyPriceRupees?.let { "₹$it / month" }
+                    ?: "",
                   fontSize = 12.sp,
                   color = BestNetMuted
                 )

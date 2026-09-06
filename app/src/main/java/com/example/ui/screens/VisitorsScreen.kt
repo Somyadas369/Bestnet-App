@@ -59,7 +59,7 @@ import com.example.ui.theme.BestNetSurfaceVariant
 fun VisitorsScreen(
   visitors: List<Visitor>,
   onBackClick: () -> Unit,
-  onOpenPreApproveDialog: () -> Unit
+  onOpenPreApproveDialog: () -> Unit,
 ) {
   var selectedTab by remember { mutableStateOf("Visitor Log") }
 
@@ -126,7 +126,9 @@ fun VisitorsScreen(
       }
 
       item {
-        PreviewBanner(text = "Preview — Gate security logs and instant visitor entry QR / passcode.")
+        // Narrowed to what is genuinely still missing. The log and pre-approval
+        // are real now; QR/passcode entry does not exist in the product at all.
+        PreviewBanner(text = "Visitor log and pre-approval are live. QR / passcode gate entry isn't built yet.")
       }
 
       if (filteredVisitors.isEmpty()) {
@@ -156,6 +158,7 @@ fun VisitorsScreen(
       }
     }
   }
+
 }
 
 @Composable

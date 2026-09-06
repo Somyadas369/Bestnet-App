@@ -65,8 +65,10 @@ fun MainShellScreen(
   val snackbarMsg by viewModel.snackbarMessage.collectAsStateWithLifecycle()
   val activeCall by viewModel.activeCallContact.collectAsStateWithLifecycle()
   val showSpeedTest by viewModel.showSpeedTest.collectAsStateWithLifecycle()
-  val showPreApprove by viewModel.showPreApproveDialog.collectAsStateWithLifecycle()
   val showSwitchHome by viewModel.showSwitchHomeSheet.collectAsStateWithLifecycle()
+  val subscriptions by viewModel.subscriptions.collectAsStateWithLifecycle()
+  val events by viewModel.events.collectAsStateWithLifecycle()
+  val emergencyContacts by viewModel.emergencyContacts.collectAsStateWithLifecycle()
 
   val activeComplaintsCount = remember(allComplaints) {
     allComplaints.count { it.status.lowercase() != "resolved" }
@@ -224,12 +226,15 @@ fun MainShellScreen(
 
         "services" -> ServicesScreen(
           onOpenSpeedTest = { viewModel.openSpeedTest() },
-          onShowComingSoon = { viewModel.showComingSoon(it) }
+          onShowComingSoon = { viewModel.showComingSoon(it) },
+          subscriptions = subscriptions,
         )
 
         "community" -> CommunityScreen(
           onNavigateToNotices = onNavigateToNotices,
-          onShowComingSoon = { viewModel.showComingSoon(it) }
+          onShowComingSoon = { viewModel.showComingSoon(it) },
+          events = events,
+          emergencyContacts = emergencyContacts,
         )
 
         "profile" -> ProfileScreen(
@@ -248,12 +253,8 @@ fun MainShellScreen(
     SpeedTestDialog(onDismiss = { viewModel.closeSpeedTest() })
   }
 
-  if (showPreApprove) {
-    PreApproveVisitorDialog(
-      onDismiss = { viewModel.closePreApproveDialog() },
-      onPreApprove = { name, type -> viewModel.preApproveVisitor(name, type) }
-    )
-  }
+  // The pre-approve dialog is rendered once at the NavHost level (MainActivity)
+  // so it also works from the Visitors screen, which is a sibling destination.
 
   if (showSwitchHome) {
     SwitchHomeBottomSheet(

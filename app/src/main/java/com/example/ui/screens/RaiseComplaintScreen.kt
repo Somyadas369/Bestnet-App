@@ -68,7 +68,13 @@ data class ComplaintCategory(val name: String, val icon: ImageVector)
 @Composable
 fun RaiseComplaintScreen(
   onBackClick: () -> Unit,
-  onSubmitComplaint: (category: String, description: String, onComplete: (String) -> Unit) -> Unit
+  onSubmitComplaint: (
+    category: String,
+    description: String,
+    onResult: (success: Boolean, reference: String?) -> Unit,
+  ) -> Unit,
+  submitting: Boolean = false,
+  errorMessage: String? = null,
 ) {
   var selectedCategory by remember { mutableStateOf("Plumber") }
   var description by remember { mutableStateOf("") }
@@ -343,20 +349,42 @@ fun RaiseComplaintScreen(
         Button(
           onClick = {
             if (description.isNotBlank()) {
-              currentStep = 3
-              onSubmitComplaint(selectedCategory, description.trim()) { ticket ->
-                submittedTicketNumber = ticket
+              // Only advance to the confirmation step once the server has
+              // actually accepted the ticket. This previously moved to step 3
+              // immediately, so the resident saw a success screen and a ticket
+              // number whether or not anything had been filed.
+              onSubmitComplaint(selectedCategory, description.trim()) { success, reference ->
+                if (success) {
+                  submittedTicketNumber = reference
+                  currentStep = 3
+                }
               }
             }
           },
-          enabled = description.isNotBlank(),
+          enabled = description.isNotBlank() && !submitting,
           modifier = Modifier
             .fillMaxWidth()
             .height(50.dp),
           shape = RoundedCornerShape(25.dp),
           colors = ButtonDefaults.buttonColors(containerColor = BestNetGreen)
         ) {
-          Text("Submit Complaint", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+          Text(
+            if (submitting) "Submitting…" else "Submit Complaint",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+          )
+        }
+
+        // The server's reason, shown as-is. A complaint that failed to send must
+        // say so on this screen, not vanish into a snackbar the user may miss.
+        if (errorMessage != null) {
+          Spacer(modifier = Modifier.height(12.dp))
+          Text(
+            errorMessage,
+            color = Color(0xFFDC2626),
+            fontSize = 13.sp,
+            modifier = Modifier.fillMaxWidth(),
+          )
         }
         Spacer(modifier = Modifier.height(24.dp))
       }

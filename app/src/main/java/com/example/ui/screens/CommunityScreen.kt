@@ -48,6 +48,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.remote.CommunityEventDto
+import com.example.data.remote.EmergencyContactDto
+import com.example.data.remote.eventWhen
 import com.example.ui.theme.BestNetBackground
 import com.example.ui.theme.BestNetBorder
 import com.example.ui.theme.BestNetGreen
@@ -59,7 +62,10 @@ import com.example.ui.theme.BestNetSurface
 @Composable
 fun CommunityScreen(
   onNavigateToNotices: () -> Unit,
-  onShowComingSoon: (String) -> Unit
+  onShowComingSoon: (String) -> Unit,
+  // null = not loaded yet, distinguished from "none scheduled".
+  events: List<CommunityEventDto>? = null,
+  emergencyContacts: List<EmergencyContactDto>? = null,
 ) {
   var showEventsDialog by remember { mutableStateOf(false) }
   var showAmenitiesDialog by remember { mutableStateOf(false) }
@@ -218,11 +224,22 @@ fun CommunityScreen(
       },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("1. Society Annual General Meeting", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-          Text("Date: Sunday, 14 Sep · 10:00 AM at Clubhouse Hall", fontSize = 12.sp, color = BestNetMuted)
-
-          Text("2. Weekend Yoga & Meditation Camp", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-          Text("Date: Saturday, 20 Sep · 06:30 AM at Central Lawn", fontSize = 12.sp, color = BestNetMuted)
+          when {
+            events == null -> Text("Loading…", fontSize = 13.sp, color = BestNetMuted)
+            events.isEmpty() -> Text(
+              "Nothing scheduled right now.",
+              fontSize = 13.sp,
+              color = BestNetMuted,
+            )
+            else -> events.forEach { e ->
+              Text(e.title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+              Text(
+                listOfNotNull(eventWhen(e.startsAt), e.venue).joinToString(" · "),
+                fontSize = 12.sp,
+                color = BestNetMuted,
+              )
+            }
+          }
         }
       },
       shape = RoundedCornerShape(18.dp),
@@ -247,11 +264,21 @@ fun CommunityScreen(
         Text("Amenities Booking", fontWeight = FontWeight.Bold, fontSize = 18.sp)
       },
       text = {
+        // Sample data, and said so plainly. There is no amenity or booking model
+        // in the backend, so these availabilities are not real and booking one
+        // is not possible — showing them unlabelled would have residents turn
+        // up at a court they think they reserved.
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("• Clubhouse Banquet: Available (Slot: 6 PM - 11 PM)", fontSize = 13.sp)
-          Text("• Tennis Court: Booked until 5 PM", fontSize = 13.sp)
-          Text("• Swimming Pool: Open (6 AM - 9 PM daily)", fontSize = 13.sp)
-          Text("• Gymnasium: Open (24x7 for residents)", fontSize = 13.sp)
+          Text(
+            "Amenities booking isn't built yet. The list below is an example, not live availability.",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFFB45309),
+          )
+          Text("• Clubhouse Banquet", fontSize = 13.sp, color = BestNetMuted)
+          Text("• Tennis Court", fontSize = 13.sp, color = BestNetMuted)
+          Text("• Swimming Pool", fontSize = 13.sp, color = BestNetMuted)
+          Text("• Gymnasium", fontSize = 13.sp, color = BestNetMuted)
         }
       },
       shape = RoundedCornerShape(18.dp),
@@ -277,11 +304,17 @@ fun CommunityScreen(
       },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("Gate 1 Security: +91 91234 56789", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-          Text("Estate Facility Mgr: +91 92345 67890", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-          Text("Nearest Hospital Ambulance: 108 / 102", fontSize = 13.sp)
-          Text("Local Police Station: 112 / 100", fontSize = 13.sp)
-          Text("Fire Department: 101", fontSize = 13.sp)
+          when {
+            emergencyContacts == null -> Text("Loading…", fontSize = 13.sp, color = BestNetMuted)
+            emergencyContacts.isEmpty() -> Text(
+              "Your community hasn't added emergency contacts yet.",
+              fontSize = 13.sp,
+              color = BestNetMuted,
+            )
+            else -> emergencyContacts.forEach { c ->
+              Text("${c.label}: ${c.phone}", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+          }
         }
       },
       shape = RoundedCornerShape(18.dp),

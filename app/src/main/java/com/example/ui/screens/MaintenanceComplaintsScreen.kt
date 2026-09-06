@@ -98,9 +98,20 @@ fun MaintenanceComplaintsScreen(
   complaints: List<Complaint>,
   currentUnit: String = "A-1201",
   onBackClick: () -> Unit,
-  onSubmitComplaint: (title: String, category: String, description: String, priority: String, onComplete: (String) -> Unit) -> Unit,
+  // onResult reports what the *server* did. It used to be a bare
+  // `onComplete(ticketNumber)` that always fired, with the number invented
+  // locally — so a failed submission still showed a confirmation dialog.
+  onSubmitComplaint: (
+    title: String,
+    category: String,
+    description: String,
+    priority: String,
+    onResult: (success: Boolean, reference: String?) -> Unit,
+  ) -> Unit,
   onUpdateStatus: (id: Long, newStatus: String) -> Unit,
-  onDeleteComplaint: (id: Long) -> Unit
+  onDeleteComplaint: (id: Long) -> Unit,
+  submitting: Boolean = false,
+  errorMessage: String? = null,
 ) {
   var selectedTab by remember { mutableIntStateOf(0) } // 0: Track Complaints, 1: Submit Complaint
   var statusFilter by remember { mutableStateOf("All") } // All, Pending, In Progress, Resolved
@@ -253,10 +264,16 @@ fun MaintenanceComplaintsScreen(
         // Submit View
         SubmitComplaintFormView(
           currentUnit = currentUnit,
+          submitting = submitting,
+          errorMessage = errorMessage,
           onSubmit = { title, category, description, priority ->
-            onSubmitComplaint(title, category, description, priority) { ticket ->
-              recentlySubmittedTicket = ticket
-              selectedTab = 0
+            onSubmitComplaint(title, category, description, priority) { success, reference ->
+              // Confirmation and the jump to the list only happen when the
+              // server actually accepted the ticket.
+              if (success) {
+                recentlySubmittedTicket = reference
+                selectedTab = 0
+              }
             }
           }
         )
@@ -874,7 +891,9 @@ fun StatusSummaryCard(
 @Composable
 fun SubmitComplaintFormView(
   currentUnit: String,
-  onSubmit: (title: String, category: String, description: String, priority: String) -> Unit
+  onSubmit: (title: String, category: String, description: String, priority: String) -> Unit,
+  submitting: Boolean = false,
+  errorMessage: String? = null,
 ) {
   var title by remember { mutableStateOf("") }
   var selectedCategory by remember { mutableStateOf("Plumber") }
@@ -1146,14 +1165,30 @@ fun SubmitComplaintFormView(
           val finalDesc = if (description.isNotBlank()) description.trim() else "Maintenance requested for $selectedCategory."
           onSubmit(finalTitle, selectedCategory, finalDesc, priority)
         },
-        enabled = title.isNotBlank() || description.isNotBlank(),
+        enabled = (title.isNotBlank() || description.isNotBlank()) && !submitting,
         modifier = Modifier
           .fillMaxWidth()
           .height(52.dp),
         shape = RoundedCornerShape(26.dp),
         colors = ButtonDefaults.buttonColors(containerColor = BestNetGreen)
       ) {
-        Text("Submit Maintenance Complaint", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(
+          if (submitting) "Submitting…" else "Submit Maintenance Complaint",
+          fontSize = 15.sp,
+          fontWeight = FontWeight.Bold,
+        )
+      }
+
+      // A complaint that did not reach the server has to say so here, on the
+      // form, rather than leaving the resident to assume it was filed.
+      if (errorMessage != null) {
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+          errorMessage,
+          color = Color(0xFFDC2626),
+          fontSize = 13.sp,
+          modifier = Modifier.fillMaxWidth(),
+        )
       }
       Spacer(modifier = Modifier.height(36.dp))
     }

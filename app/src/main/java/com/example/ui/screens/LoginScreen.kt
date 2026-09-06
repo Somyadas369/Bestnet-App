@@ -52,9 +52,15 @@ import com.example.ui.theme.BestNetSurface
 @Composable
 fun LoginScreen(
   onLoginSuccess: () -> Unit,
-  onShowComingSoon: (String) -> Unit
+  onShowComingSoon: (String) -> Unit,
+  onRequestOtp: (String, (Boolean) -> Unit) -> Unit = { _, cb -> cb(true) },
+  onVerifyOtp: (String, String, (Boolean) -> Unit) -> Unit = { _, _, cb -> cb(true) },
+  busy: Boolean = false,
+  errorMessage: String? = null,
 ) {
-  var phoneNumber by remember { mutableStateOf("9876543210") }
+  // Starts empty: a prefilled number would send a real OTP to someone else's
+  // phone on the first tap.
+  var phoneNumber by remember { mutableStateOf("") }
   var otpStep by remember { mutableStateOf(false) }
   var otpCode by remember { mutableStateOf("") }
 
@@ -151,27 +157,30 @@ fun LoginScreen(
 
           Spacer(modifier = Modifier.height(20.dp))
 
-          // Send OTP button
+          // Send OTP button — only advances to the code step once the server
+          // has actually accepted the request, so the user is never asked for a
+          // code that was never sent.
           Button(
             onClick = {
-              if (phoneNumber.length >= 10) {
-                otpStep = true
+              if (phoneNumber.length == 10) {
+                onRequestOtp(phoneNumber) { ok -> if (ok) otpStep = true }
               }
             },
+            enabled = phoneNumber.length == 10 && !busy,
             modifier = Modifier
               .fillMaxWidth()
               .height(50.dp),
             shape = RoundedCornerShape(25.dp),
             colors = ButtonDefaults.buttonColors(containerColor = BestNetGreen)
           ) {
-            Text("Send OTP", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(if (busy) "Sending…" else "Send OTP", fontSize = 15.sp, fontWeight = FontWeight.Bold)
           }
         } else {
           // OTP code input
           OutlinedTextField(
             value = otpCode,
             onValueChange = { if (it.length <= 6) otpCode = it },
-            placeholder = { Text("Enter 6-digit OTP (e.g. 123456)") },
+            placeholder = { Text("Enter the 6-digit code") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             shape = RoundedCornerShape(12.dp),
@@ -185,19 +194,37 @@ fun LoginScreen(
           Spacer(modifier = Modifier.height(16.dp))
 
           Button(
-            onClick = onLoginSuccess,
+            onClick = { onVerifyOtp(phoneNumber, otpCode) { ok -> if (ok) onLoginSuccess() } },
+            enabled = otpCode.length == 6 && !busy,
             modifier = Modifier
               .fillMaxWidth()
               .height(50.dp),
             shape = RoundedCornerShape(25.dp),
             colors = ButtonDefaults.buttonColors(containerColor = BestNetGreen)
           ) {
-            Text("Verify & sign in", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+              if (busy) "Signing in…" else "Verify & sign in",
+              fontSize = 15.sp,
+              fontWeight = FontWeight.Bold,
+            )
           }
 
-          TextButton(onClick = { otpStep = false }) {
+          TextButton(onClick = { otpStep = false; otpCode = "" }) {
             Text("Use a different number", color = BestNetGreen, fontSize = 13.sp)
           }
+        }
+
+        // Server's own message, shown verbatim — "Invalid or expired OTP" is
+        // far more useful to the user than a generic failure.
+        if (errorMessage != null) {
+          Spacer(modifier = Modifier.height(12.dp))
+          Text(
+            errorMessage,
+            color = Color(0xFFDC2626),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+          )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
